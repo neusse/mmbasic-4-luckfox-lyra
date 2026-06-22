@@ -10,9 +10,11 @@ $ErrorActionPreference = 'Stop'
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $binary = Join-Path $repoRoot 'build\mmb4l-luckfox-release\mmbasic'
-$examplesDir = Join-Path $repoRoot 'mmb4l\examples'
-$testsDir = Join-Path $repoRoot 'mmb4l\tests'
-$sptoolsDir = Join-Path $repoRoot 'mmb4l\sptools'
+$patchedSourceDir = Join-Path $repoRoot 'build\mmb4l-luckfox-source'
+$sourceRoot = if (Test-Path -LiteralPath $patchedSourceDir) { $patchedSourceDir } else { Join-Path $repoRoot 'mmb4l' }
+$examplesDir = Join-Path $sourceRoot 'examples'
+$testsDir = Join-Path $sourceRoot 'tests'
+$sptoolsDir = Join-Path $sourceRoot 'sptools'
 $targetRunner = Join-Path $repoRoot 'scripts\target\mmb4l-run-tests.sh'
 
 foreach ($path in @($binary, $examplesDir, $testsDir, $sptoolsDir, $targetRunner)) {
@@ -92,6 +94,7 @@ try {
   if ($PathBinDir -and ($PathBinDir -ne $InstallBinDir)) {
     Write-Output "Linked mmbasic into $PathBinDir for shell PATH discovery"
   }
+  Write-Output "Deployed BASIC examples/tests from $sourceRoot"
   Write-Output "Installed examples/tests/sptools to $InstallShareDir"
   Write-Output "Installed test runner to $InstallBinDir/mmb4l-run-tests"
 } finally {

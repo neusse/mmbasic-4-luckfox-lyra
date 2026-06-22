@@ -18,6 +18,11 @@ The `tests` and `sptools` directories are installed as siblings because the
 upstream test programs include files through paths such as
 `../sptools/src/sptest/unittest.inc`.
 
+If `build/mmb4l-luckfox-source` exists, deployment uses that patched source
+copy for examples, tests, and `sptools`. That keeps target tests aligned with
+the exact patch queue used for the binary. If no patched build source exists,
+deployment falls back to the pristine `mmb4l` submodule.
+
 ## Deploy
 
 Build first:
@@ -64,19 +69,21 @@ Run the PicoCalc core test set:
 mmb4l-run-tests
 ```
 
-The core set runs the non-interactive top-level upstream tests that passed on
-the PicoCalc target during repository setup. It skips upstream tests that are
-known to depend on desktop/GNU shell behavior, a larger graphics surface,
-interactive cursor state, local developer paths, exact shell error strings, or
-timing assumptions:
+The core set runs the top-level upstream tests patched for the Luckfox Lyra
+PicoCalc environment. From an ADB shell, console cursor and terminal-size
+assertions are skipped with a notice because ADB is not the PicoCalc console.
+Run the same command from the PicoCalc console for fuller console/framebuffer
+coverage.
 
-- `tst_file_fns.bas`
-- `tst_longstring.bas`
-- `tst_mminfo.bas`
-- `tst_options.bas`
-- `tst_strings.bas`
-- `tst_system.bas`
-- `tst_time_fns.bas`
+The runner exits nonzero if MMBasic exits nonzero or if a test output contains
+a `FAIL (` summary. This is needed because upstream BASIC assertion failures
+can still leave the interpreter process with exit status 0.
+
+The Luckfox image used here is a Buildroot/BusyBox environment, not a full GNU
+desktop distribution. When a test only needs a simple tool behavior, this
+project patches the test or runtime expectation instead of requiring full GNU
+coreutils. If a future MMB4L feature genuinely needs a GNU-only behavior, add
+that as an explicit SDK/runtime dependency and document it here.
 
 Run the exact upstream test entry point:
 

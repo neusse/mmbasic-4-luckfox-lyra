@@ -52,7 +52,7 @@ rsync -a --delete \
 # Windows checkouts may have CRLF line endings. Normalize the generated build
 # copy so portable patches apply without modifying the upstream submodule.
 find "$source_dir" \
-  \( -name 'CMakeLists.txt' -o -name '*.cmake' -o -name '*.c' -o -name '*.h' -o -name '*.cxx' -o -name '*.hxx' \) \
+  \( -name 'CMakeLists.txt' -o -name '*.cmake' -o -name '*.c' -o -name '*.h' -o -name '*.cxx' -o -name '*.hxx' -o -name '*.bas' -o -name '*.inc' \) \
   -type f -exec perl -pi -e 's/\r$//' {} +
 
 shopt -s nullglob

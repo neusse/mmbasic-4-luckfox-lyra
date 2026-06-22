@@ -62,6 +62,67 @@ Upstream suitability: moderate. A cleaner upstream change might scope this flag
 only to `dr_audio.c` or update the bundled `dr_mp3.h`, but this patch is small
 and keeps all other warnings as errors.
 
+### `0004-harden-basic-tests-for-luckfox-target.patch`
+
+Purpose: make selected upstream BASIC tests meaningful on the Luckfox
+Buildroot/BusyBox target.
+
+Why it is needed: the upstream tests include an empty `ATAN3` placeholder,
+assume GNU `realpath --relative-to`, assume a developer checkout path under
+`$HOME/github`, and run console cursor checks from contexts such as ADB shell
+where no interactive console is attached.
+
+What it changes:
+
+- Adds `Math(Atan3 ...)` quadrant assertions.
+- Replaces GNU-only `realpath --relative-to` usage with a BASIC relative-path
+  helper.
+- Uses `Mm.Info(Path)` for the current-file test so installed tests work.
+- Skips cursor/terminal-size assertions only when the console query is not
+  available.
+- Falls back from `PicoMiteVGA` to `Game*Mite` pin-number simulation when the
+  target framebuffer cannot allocate the larger VGA surface.
+
+Upstream suitability: good candidate with review. The test changes are mostly
+portability improvements, though the installed-layout expectation may need to
+be phrased generically for upstream.
+
+### `0005-fix-arm-range-error-formatting.patch`
+
+Purpose: fix range error messages on 32-bit ARM.
+
+Why it is needed: `MMINTEGER` is `int64_t`, but the legacy error formatter reads
+`%` placeholders as `int`. Passing `MMINTEGER` values through varargs corrupts
+the argument stream on 32-bit ARM and produces messages such as
+`0 is invalid (valid is 801 to 0)`.
+
+What it changes:
+
+- Adds `error_throw_int_range()`.
+- Uses that helper from `getint()`.
+
+Upstream suitability: good candidate. This fixes a real 32-bit varargs type
+mismatch without changing unrelated callers.
+
+### `0006-adapt-tests-for-luckfox-busybox-runtime.patch`
+
+Purpose: adapt test expectations to the Luckfox Buildroot/BusyBox runtime.
+
+Why it is needed: BusyBox shell/coreutils messages differ from GNU desktop
+Linux, ADB may run with `HOME=/root`, exact epoch comparisons can cross a
+second boundary, and the PicoCalc framebuffer is smaller than some simulated
+targets.
+
+What it changes:
+
+- Allows BusyBox `ls` and shell error output.
+- Uses the actual `HOME` value reported by MMB4L.
+- Allows a two-second tolerance around `Epoch(Now)`.
+- Skips display simulation tests on small MMB4L framebuffers.
+
+Upstream suitability: moderate. The time tolerance and shell portability are
+good candidates; the framebuffer skip is target-specific.
+
 ## Patch Rules
 
 - Keep upstream `mmb4l/` as a clean submodule checkout whenever possible.

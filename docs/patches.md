@@ -18,6 +18,10 @@ The build wrapper:
 
 The `mmb4l/` submodule is not modified.
 
+Deployment also uses the generated patched source copy for BASIC examples and
+tests when `build/mmb4l-luckfox-source` exists. That means target-side test
+runs exercise the same patch queue as the built binary.
+
 ## Why This Model
 
 This keeps attribution and source ownership clear:

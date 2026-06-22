@@ -67,21 +67,35 @@ tst_csub_as_data.bas
 tst_data.bas
 tst_error_handling.bas
 tst_eval.bas
+tst_file_fns.bas
 tst_fundamentals.bas
 tst_inc.bas
 tst_json.bas
 tst_labels.bas
+tst_longstring.bas
 tst_math.bas
 tst_memory.bas
+tst_mminfo.bas
+tst_options.bas
 tst_peek.bas
 tst_poke.bas
 tst_setenv.bas
 tst_simple_maths_fns.bas
 tst_sort.bas
 tst_static.bas
+tst_strings.bas
 tst_subfun.bas
+tst_system.bas
+tst_time_fns.bas
 tst_variables.bas
 "
+
+if [ -t 0 ]; then
+  :
+else
+  echo "Notice: running from a non-interactive shell; console cursor/terminal-size checks are skipped by patched tests."
+  echo "Run this from the PicoCalc console for the full console/framebuffer coverage."
+fi
 
 test_args=
 if [ "${1:-}" = "--upstream-all" ]; then
@@ -119,9 +133,26 @@ for test_file in $tests; do
     exit 1
   fi
   echo "Running $test_file"
+  output_file=${TMPDIR:-/tmp}/mmb4l-test-$$.out
   if [ -n "$test_args" ]; then
-    "$MMBASIC" "$test_file" $test_args </dev/null
+    "$MMBASIC" "$test_file" $test_args >"$output_file" 2>&1 </dev/null || {
+      status=$?
+      cat "$output_file"
+      rm -f "$output_file"
+      exit "$status"
+    }
   else
-    "$MMBASIC" "$test_file" </dev/null
+    "$MMBASIC" "$test_file" >"$output_file" 2>&1 </dev/null || {
+      status=$?
+      cat "$output_file"
+      rm -f "$output_file"
+      exit "$status"
+    }
   fi
+  cat "$output_file"
+  if grep -q "FAIL (" "$output_file"; then
+    rm -f "$output_file"
+    exit 1
+  fi
+  rm -f "$output_file"
 done
