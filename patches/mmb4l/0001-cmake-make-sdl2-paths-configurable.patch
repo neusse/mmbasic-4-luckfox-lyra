@@ -1,0 +1,31 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index d5e8e70..ea15784 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -13,6 +13,9 @@ set(CMAKE_CXX_STANDARD 11)
+
+ include(FetchContent)
+ #FetchContent_Declare(
++set(MMB4L_SDL2_INCLUDE_DIR "/usr/include/SDL2" CACHE PATH "SDL2 include directory")
++set(MMB4L_SDL2_LIBRARY "SDL2" CACHE STRING "SDL2 library or full library path")
++
+ #  googletest
+ #  URL https://github.com/google/googletest/archive/e2239ee6043f73722e7aa812a459f54a28552929.zip
+ #)
+@@ -230,14 +233,14 @@ set(MMB4L_SOURCE_FILES
+ add_executable(mmbasic ${MMB4L_CORE_SOURCE_FILES} ${MMB4L_SOURCE_FILES})
+
+ target_include_directories(mmbasic PUBLIC
+-    /usr/include/SDL2
++    ${MMB4L_SDL2_INCLUDE_DIR}
+ )
+
+ target_link_libraries(
+     mmbasic
+     m
+     ${GCOV_LINK_LIBRARY}
+-    SDL2
++    ${MMB4L_SDL2_LIBRARY}
+ )
+
+ ################################################################################

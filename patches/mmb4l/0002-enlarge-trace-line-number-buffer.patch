@@ -1,0 +1,25 @@
+diff --git a/src/commands/cmd_trace.c b/src/commands/cmd_trace.c
+index 78fa2a1..7b8e0a2 100644
+--- a/src/commands/cmd_trace.c
++++ b/src/commands/cmd_trace.c
+@@ -64,6 +64,6 @@ int TraceLines(const char *target) {
+             p++;  // and step over the line number
+             if (p >= target) {
+-                char buf[STRINGSIZE], buff[10];
++                char buf[STRINGSIZE], buff[STRINGSIZE];
+                 char *ename, *cpos = NULL;
+                 memcpy(buf, p, STRINGSIZE);
+                 i = 0;
+diff --git a/src/core/MMBasic.c b/src/core/MMBasic.c
+index c7b62c7..8359bd6 100644
+--- a/src/core/MMBasic.c
++++ b/src/core/MMBasic.c
+@@ -187,7 +187,7 @@ void ExecuteProgram(char *p) {
+ #if defined(__mmb4l__)
+                 // Copied from the CMM2,
+                 // looks like it has duplication with cmd_trace.c#TraceLines()
+-                char buf[STRINGSIZE], buff[10];
++                char buf[STRINGSIZE], buff[STRINGSIZE];
+                 MMPrintString("[");
+                 memcpy(buf, p, STRINGSIZE);
+                 char *ename, *cpos = NULL;

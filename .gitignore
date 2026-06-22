@@ -1,0 +1,32 @@
+# Local build outputs
+build/
+cmake-build-*/
+out/
+dist/
+*.o
+*.obj
+*.exe
+*.dll
+*.so
+*.a
+
+# Local deployment/test artifacts
+artifacts/
+logs/
+*.log
+
+# Editor and OS noise
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Syncthing temporary files
+~syncthing~*
+*.tmp
+
+# Local machine notes can be kept outside public docs
+*.local.md
+HANDOFF.md
+TODO_mmb4l.md
+docs/superpowers/
