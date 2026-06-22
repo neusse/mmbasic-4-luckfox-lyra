@@ -18,7 +18,8 @@ Environment:
   MMB4L_TEST_DIR   Installed test directory. Default: $MMB4L_SHARE_DIR/tests
 
 With no test files, this runs the PicoCalc core test set. Use --upstream-all
-to run the upstream tests/run_tests.bas entry point.
+to run the upstream tests/run_tests.bas entry point. The upstream-all path is
+broader and slower than the PicoCalc core set.
 USAGE
 }
 
@@ -134,22 +135,26 @@ for test_file in $tests; do
   fi
   echo "Running $test_file"
   output_file=${TMPDIR:-/tmp}/mmb4l-test-$$.out
+  output_pipe=${TMPDIR:-/tmp}/mmb4l-test-$$.pipe
+  rm -f "$output_pipe"
+  mkfifo "$output_pipe"
+  tee "$output_file" <"$output_pipe" &
+  tee_pid=$!
+  set +e
   if [ -n "$test_args" ]; then
-    "$MMBASIC" "$test_file" $test_args >"$output_file" 2>&1 </dev/null || {
-      status=$?
-      cat "$output_file"
-      rm -f "$output_file"
-      exit "$status"
-    }
+    "$MMBASIC" "$test_file" $test_args >"$output_pipe" 2>&1 </dev/null
+    status=$?
   else
-    "$MMBASIC" "$test_file" >"$output_file" 2>&1 </dev/null || {
-      status=$?
-      cat "$output_file"
-      rm -f "$output_file"
-      exit "$status"
-    }
+    "$MMBASIC" "$test_file" >"$output_pipe" 2>&1 </dev/null
+    status=$?
   fi
-  cat "$output_file"
+  set -e
+  wait "$tee_pid"
+  rm -f "$output_pipe"
+  if [ "$status" -ne 0 ]; then
+    rm -f "$output_file"
+    exit "$status"
+  fi
   if grep -q "FAIL (" "$output_file"; then
     rm -f "$output_file"
     exit 1

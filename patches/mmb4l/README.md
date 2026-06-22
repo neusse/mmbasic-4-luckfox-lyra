@@ -123,6 +123,27 @@ What it changes:
 Upstream suitability: moderate. The time tolerance and shell portability are
 good candidates; the framebuffer skip is target-specific.
 
+### `0007-gate-console-and-directfb-test-side-effects.patch`
+
+Purpose: keep console and upstream-all test runs from corrupting the PicoCalc
+shell or starting DirectFB unless explicitly requested.
+
+Why it is needed: `Console GetCursor` emits an ANSI cursor-position query
+(`ESC[6n`). On the PicoCalc shell, the terminal response can be left for bash
+to parse after MMBasic exits. `Option Simulate PicoMiteVGA` can also start
+DirectFB, which is noisy over ADB and can fail for non-root console users even
+when the test only needs a PicoMite-style pin map.
+
+What it changes:
+
+- Requires `MMB4L_TEST_CURSOR=1` before running `test_hpos` and `test_vpos`.
+- Skips display-backed pin-map simulation by default after verifying the native
+  MMB4L pin-map error path.
+- Allows `MMB4L_TEST_DIRECTFB=1` to exercise the PicoMiteVGA path explicitly.
+
+Upstream suitability: target-specific. This is best kept in the Luckfox wrapper
+unless upstream adds a general way to mark tests as interactive or display-owning.
+
 ## Patch Rules
 
 - Keep upstream `mmb4l/` as a clean submodule checkout whenever possible.

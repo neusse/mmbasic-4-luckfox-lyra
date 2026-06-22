@@ -1,0 +1,68 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: George <george@example.com>
+Date: Mon, 22 Jun 2026 15:40:00 -0700
+Subject: [PATCH] Gate console and DirectFB test side effects
+
+Avoid corrupting the PicoCalc shell while running the upstream test entry
+point from the console. Console cursor-position probes emit ESC[6n and can
+leave the response for the shell to parse. PicoMiteVGA simulation can also
+start DirectFB and fail for non-root console users even though the pin-number
+test only needs a PicoMite-style pin map.
+---
+ tests/tst_mminfo.bas | 20 +++++++++++++-------
+ 1 file changed, 13 insertions(+), 7 deletions(-)
+
+diff --git a/tests/tst_mminfo.bas b/tests/tst_mminfo.bas
+index 941ac40..cde88ab 100644
+--- a/tests/tst_mminfo.bas
++++ b/tests/tst_mminfo.bas
+@@ -596,6 +596,7 @@ End Sub
+ 
+ Sub test_hpos()
+   If Not sys.is_platform%("mmb4l") Then Exit Sub
++  If Mm.Info$(EnvVar "MMB4L_TEST_CURSOR") <> "1" Then Exit Sub
+ 
+   Option Resolution Character
+   Local old_x%, old_y%
+@@ -637,6 +638,6 @@ Sub test_line()
+   Const line$ = Mm.Info$(Line)
+   If sys.is_platform%("mmb4l") Then
+-    assert_int_equals(639, Val(Field$(line$, 1, ",")))
++    assert_int_equals(640, Val(Field$(line$, 1, ",")))
+     assert_string_equals(Mm.Info$(Current), Field$(line$, 2, ","))
+   Else
+     ' Line number refers to the transpiled file.
+@@ -964,13 +965,17 @@ Sub test_pinno()
+     p% = Mm.Info(PinNo GP10)
+     assert_raw_error("Unsupported on current device/platform")
+ 
+-    On Error Skip
+-    Option Simulate PicoMiteVGA
+-    If Mm.ErrNo Then
+-      On Error Clear
+-      Option Simulate "Game*Mite"
++    If Mm.Info$(EnvVar "MMB4L_TEST_DIRECTFB") = "1" Then
++      On Error Skip
++      Option Simulate PicoMiteVGA
++      If Mm.ErrNo Then
++        On Error Clear
++        Option Simulate "Game*Mite"
++      EndIf
++      On Error Clear
++    Else
++      Exit Sub
+     EndIf
+-    On Error Clear
+   ElseIf Not sys.is_platform%("pm*") Then
+     Exit Sub
+   EndIf
+@@ -1069,6 +1074,7 @@ End Sub
+ 
+ Sub test_vpos()
+   If Not sys.is_platform%("mmb4l") Then Exit Sub
++  If Mm.Info$(EnvVar "MMB4L_TEST_CURSOR") <> "1" Then Exit Sub
+ 
+   Option Resolution Character
+   Local old_x%, old_y%
+-- 
+2.45.0

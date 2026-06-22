@@ -70,10 +70,14 @@ mmb4l-run-tests
 ```
 
 The core set runs the top-level upstream tests patched for the Luckfox Lyra
-PicoCalc environment. From an ADB shell, console cursor and terminal-size
-assertions are skipped with a notice because ADB is not the PicoCalc console.
-Run the same command from the PicoCalc console for fuller console/framebuffer
-coverage.
+PicoCalc environment. Cursor-position checks and DirectFB-backed simulation
+checks are disabled by default because they can corrupt the shell prompt or
+fail for non-root console users. To opt into them explicitly:
+
+```sh
+MMB4L_TEST_CURSOR=1 mmb4l-run-tests tst_mminfo.bas
+MMB4L_TEST_DIRECTFB=1 mmb4l-run-tests tst_mminfo.bas
+```
 
 The runner exits nonzero if MMBasic exits nonzero or if a test output contains
 a `FAIL (` summary. This is needed because upstream BASIC assertion failures
@@ -90,6 +94,10 @@ Run the exact upstream test entry point:
 ```sh
 mmb4l-run-tests --upstream-all
 ```
+
+This is broader and slower than the PicoCalc core set because it uses upstream
+`tests/run_tests.bas` discovery. The runner streams output live so it does not
+look frozen during long runs.
 
 Run individual upstream tests:
 
