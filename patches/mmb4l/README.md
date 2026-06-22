@@ -144,6 +144,24 @@ What it changes:
 Upstream suitability: target-specific. This is best kept in the Luckfox wrapper
 unless upstream adds a general way to mark tests as interactive or display-owning.
 
+### `0008-report-armv7-linux-architecture.patch`
+
+Purpose: report the actual 32-bit ARM architecture level for Luckfox builds.
+
+Why it is needed: upstream MMB4L labels every `__arm__` Linux build as
+`Linux armv6l`. The Luckfox SDK compiler targets ARMv7-A hard-float, so
+`mmbasic -v` and `Mm.Info$(Arch)` should report `Linux armv7l`.
+
+What it changes:
+
+- Uses `__ARM_ARCH >= 7` to select `Linux armv7l`.
+- Keeps `Linux armv6l` for older 32-bit ARM builds.
+- Updates the upstream `tst_mminfo.bas` expectation for `armv7l GNU/Linux`.
+- Adds an `mmb4l-armv7l` alias to the `sptools` platform helper.
+
+Upstream suitability: good. This is a general correction for 32-bit ARM Linux
+builds that does not require Luckfox-specific paths or runtime assumptions.
+
 ## Patch Rules
 
 - Keep upstream `mmb4l/` as a clean submodule checkout whenever possible.

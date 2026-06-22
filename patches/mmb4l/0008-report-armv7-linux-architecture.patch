@@ -1,0 +1,64 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: George <george@example.com>
+Date: Mon, 22 Jun 2026 16:35:00 -0700
+Subject: [PATCH] Report ARMv7 Linux architecture
+
+MMB4L reported every 32-bit Linux ARM build as Linux armv6l, even when
+the compiler target is ARMv7-A. Use the compiler's __ARM_ARCH macro to
+report Linux armv7l for ARMv7+ builds while keeping the existing armv6l
+label for older 32-bit ARM targets.
+---
+ sptools/src/splib/system.inc | 3 +++
+ src/Version.h                | 6 +++++-
+ tests/tst_mminfo.bas         | 2 +-
+ 3 files changed, 9 insertions(+), 2 deletions(-)
+
+diff --git a/sptools/src/splib/system.inc b/sptools/src/splib/system.inc
+index 99b0414..e61264b 100644
+--- a/sptools/src/splib/system.inc
++++ b/sptools/src/splib/system.inc
+@@ -304,8 +304,11 @@ Function sys.is_platform%(d1$, d2$, d3$, d4$, d5$)
+       Case "game*mite" : match$ = "|pm*|gamemite|"
+       Case "mmb4l"
+         If LCase$(devices$(ii%)) = "mmb4l-armv6l" Then
+           If Mm.Info$(Arch) = "Linux armv6l" Then Exit Function
+         EndIf
++        If LCase$(devices$(ii%)) = "mmb4l-armv7l" Then
++          If Mm.Info$(Arch) = "Linux armv7l" Then Exit Function
++        EndIf
+         match$ = "|mmb4l|"
+       Case "mmbasic for windows" : match$ = "|mmb4w|"
+       Case "picogame vga" : match$ = "|pgvga|pmvga*|pm*|"
+diff --git a/src/Version.h b/src/Version.h
+index 1926f15..22b28b7 100644
+--- a/src/Version.h
++++ b/src/Version.h
+@@ -56,8 +56,12 @@
+     #elif defined(__aarch64__)
+         #define MM_ARCH  "Linux aarch64"
+         #define ENV64BIT
+     #elif defined(__arm__)
+-        #define MM_ARCH  "Linux armv6l"
++        #if defined(__ARM_ARCH) && (__ARM_ARCH >= 7)
++            #define MM_ARCH  "Linux armv7l"
++        #else
++            #define MM_ARCH  "Linux armv6l"
++        #endif
+         #define ENV32BIT
+     #elif defined(__i686__)
+         #define MM_ARCH  "Linux i686"
+diff --git a/tests/tst_mminfo.bas b/tests/tst_mminfo.bas
+index 2fd64b6..c48cd8a 100644
+--- a/tests/tst_mminfo.bas
++++ b/tests/tst_mminfo.bas
+@@ -103,7 +103,7 @@ Sub test_arch()
+     Case "i686 GNU/Linux"    : expected_arch$ = "Linux i686"
+     Case "x86_64 GNU/Linux"  : expected_arch$ = "Linux x86_64"
+     Case "armv6l GNU/Linux"  : expected_arch$ = "Linux armv6l"
+-    Case "armv7l GNU/Linux"  : expected_arch$ = "Linux armv6l"
++    Case "armv7l GNU/Linux"  : expected_arch$ = "Linux armv7l"
+   End Select
+ 
+   assert_string_equals(expected_arch$, Mm.Info$(Arch))
+-- 
+2.45.0
