@@ -2,6 +2,7 @@ param(
   [string]$InstallBinDir = '/usr/local/bin',
   [string]$PathBinDir = '/usr/bin',
   [string]$InstallShareDir = '/usr/local/share/mmb4l',
+  [string]$DirectFbConfigPath = '/etc/directfbrc',
   [string]$RemoteStage = '/tmp/mmb4l-deploy',
   [switch]$SkipSmoke
 )
@@ -16,8 +17,9 @@ $examplesDir = Join-Path $sourceRoot 'examples'
 $testsDir = Join-Path $sourceRoot 'tests'
 $sptoolsDir = Join-Path $sourceRoot 'sptools'
 $targetRunner = Join-Path $repoRoot 'scripts\target\mmb4l-run-tests.sh'
+$directFbConfig = Join-Path $repoRoot 'scripts\target\directfbrc'
 
-foreach ($path in @($binary, $examplesDir, $testsDir, $sptoolsDir, $targetRunner)) {
+foreach ($path in @($binary, $examplesDir, $testsDir, $sptoolsDir, $targetRunner, $directFbConfig)) {
   if (-not (Test-Path -LiteralPath $path)) {
     throw "Required path not found: $path"
   }
@@ -46,8 +48,10 @@ stage='$RemoteStage'
 bin_dir='$InstallBinDir'
 path_bin_dir='$PathBinDir'
 share_dir='$InstallShareDir'
+directfb_config_path='$DirectFbConfigPath'
 
 test -f "`$stage/mmbasic"
+test -f "`$stage/directfbrc"
 test -d "`$stage/share/examples"
 test -d "`$stage/share/tests"
 test -d "`$stage/share/sptools"
@@ -61,6 +65,10 @@ cp -R "`$stage/share/examples" "`$share_dir/examples"
 cp -R "`$stage/share/tests" "`$share_dir/tests"
 cp -R "`$stage/share/sptools" "`$share_dir/sptools"
 cp "`$stage/mmb4l-run-tests.sh" "`$bin_dir/mmb4l-run-tests"
+if [ -n "`$directfb_config_path" ]; then
+  mkdir -p "`$(dirname "`$directfb_config_path")"
+  cp "`$stage/directfbrc" "`$directfb_config_path"
+fi
 
 chmod 755 "`$bin_dir/mmbasic" "`$bin_dir/mmb4l-run-tests"
 
@@ -80,6 +88,7 @@ try {
   Invoke-Adb shell "rm -rf '$RemoteStage'; mkdir -p '$RemoteStage/share'"
   Invoke-Adb push $binary "$RemoteStage/mmbasic"
   Invoke-Adb push $targetRunner "$RemoteStage/mmb4l-run-tests.sh"
+  Invoke-Adb push $directFbConfig "$RemoteStage/directfbrc"
   Invoke-Adb push $tempInstall "$RemoteStage/install.sh"
   Invoke-Adb push $examplesDir "$RemoteStage/share/"
   Invoke-Adb push $testsDir "$RemoteStage/share/"
@@ -97,6 +106,9 @@ try {
   Write-Output "Deployed BASIC examples/tests from $sourceRoot"
   Write-Output "Installed examples/tests/sptools to $InstallShareDir"
   Write-Output "Installed test runner to $InstallBinDir/mmb4l-run-tests"
+  if ($DirectFbConfigPath) {
+    Write-Output "Installed DirectFB config to $DirectFbConfigPath"
+  }
 } finally {
   Remove-Item -LiteralPath $tempInstall -Force -ErrorAction SilentlyContinue
 }

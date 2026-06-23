@@ -1,0 +1,459 @@
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -233,6 +233,11 @@
+ # add the executable
+ add_executable(mmbasic ${MMB4L_CORE_SOURCE_FILES} ${MMB4L_SOURCE_FILES})
+
++if (CMAKE_SYSTEM_PROCESSOR MATCHES "arm")
++    target_compile_definitions(mmbasic PRIVATE MMB4L_LUCKFOX_CSUB)
++    target_sources(mmbasic PRIVATE src/common/cfunction_luckfox.c)
++endif()
++
+ target_include_directories(mmbasic PUBLIC
+     ${MMB4L_SDL2_INCLUDE_DIR}
+ )
+--- a/src/common/cfunction_luckfox.c
++++ b/src/common/cfunction_luckfox.c
+@@ -0,0 +1,366 @@
++/* Luckfox/PicoCalc CSUB support for MMB4L. */
++
++#include "cfunction_luckfox.h"
++
++#include "console.h"
++#include "fonttbl.h"
++#include "graphics.h"
++#include "mmb4l.h"
++#include "memory.h"
++#include "mmtime.h"
++#include "utility.h"
++#include "../core/commandtbl.h"
++#include "../core/funtbl.h"
++
++#include <errno.h>
++#include <math.h>
++#include <stdbool.h>
++#include <stdint.h>
++#include <stdio.h>
++#include <string.h>
++#include <sys/mman.h>
++#include <unistd.h>
++
++#if defined(__arm__)
++#define CSUB_PCS __attribute__((pcs("aapcs")))
++#else
++#define CSUB_PCS
++#endif
++
++#define SINGLE_QUOTE '\''
++
++static uint32_t cfunc_ram[64];
++static uint32_t cfunc_msec = 0;
++static uint32_t cfunc_int1 = 0;
++static uint32_t cfunc_int2 = 0;
++static uint32_t cfunc_int3 = 0;
++static uint32_t cfunc_int4 = 0;
++static uint32_t csub_complete = 0;
++static uint32_t audio_output = 0;
++static uint32_t audio_wrap = 0;
++static int hres_value = 0;
++static int vres_value = 0;
++static uint64_t usec_timer_value = 0;
++
++extern char *CFunctionLibrary;
++
++static void cfunction_refresh_display_values(void) {
++    (void) graphics_ensure_default_display();
++    hres_value = graphics_current ? graphics_current->width : 0;
++    vres_value = graphics_current ? graphics_current->height : 0;
++    usec_timer_value = (uint64_t) (mmtime_now_ns() / 1000);
++}
++
++static uint64_t cfunc_usec(void) {
++    return (uint64_t) (mmtime_now_ns() / 1000);
++}
++
++static void cfunc_unsupported(void) {
++    error_throw_ex(kError, "Unsupported CSUB calltable entry");
++}
++
++static void cfunc_pinsetbit(int pin, int value) {
++    (void) pin;
++    (void) value;
++    error_throw_ex(kError, "Unsupported CSUB GPIO calltable entry");
++}
++
++static int64_t cfunc_pinread(int pin) {
++    (void) pin;
++    error_throw_ex(kError, "Unsupported CSUB GPIO calltable entry");
++    return 0;
++}
++
++static void cfunc_draw_rectangle(int x1, int y1, int x2, int y2, int colour) {
++    if (!graphics_current) ON_FAILURE_ERROR(graphics_ensure_default_display());
++    ON_FAILURE_ERROR(graphics_draw_rectangle(graphics_current, x1, y1, x2, y2, colour));
++}
++
++static void cfunc_draw_line(int x1, int y1, int x2, int y2, int width, int colour) {
++    if (!graphics_current) ON_FAILURE_ERROR(graphics_ensure_default_display());
++    ON_FAILURE_ERROR(graphics_draw_line(graphics_current, x1, y1, x2, y2, width, colour));
++}
++
++static void cfunc_draw_pixel(int x, int y, int colour) {
++    if (!graphics_current) ON_FAILURE_ERROR(graphics_ensure_default_display());
++    ON_FAILURE_ERROR(graphics_draw_pixel(graphics_current, x, y, colour));
++}
++
++static void cfunc_draw_circle(int x, int y, int radius, int width, int colour, int fill, MMFLOAT aspect) {
++    if (!graphics_current) ON_FAILURE_ERROR(graphics_ensure_default_display());
++    ON_FAILURE_ERROR(graphics_draw_circle(graphics_current, x, y, radius, width, colour, fill, aspect));
++}
++
++static void cfunc_draw_triangle(int x0, int y0, int x1, int y1, int x2, int y2, int colour, int fill) {
++    if (!graphics_current) ON_FAILURE_ERROR(graphics_ensure_default_display());
++    ON_FAILURE_ERROR(graphics_draw_triangle(graphics_current, x0, y0, x1, y1, x2, y2, colour, fill));
++}
++
++static void cfunc_draw_bitmap(
++        int x1, int y1, int width, int height, int scale, int fc, int bc, const unsigned char *bitmap) {
++    if (!graphics_current) ON_FAILURE_ERROR(graphics_ensure_default_display());
++    ON_FAILURE_ERROR(graphics_draw_bitmap(graphics_current, x1, y1, width, height, scale, fc, bc, bitmap));
++}
++
++static void cfunc_display_refresh(void) {
++    graphics_refresh_windows();
++}
++
++static MMFLOAT CSUB_PCS cfunc_int_to_float(long long int a) { return (MMFLOAT) a; }
++static MMINTEGER CSUB_PCS cfunc_float_to_int64(MMFLOAT a) { return FloatToInt64(a); }
++static MMFLOAT CSUB_PCS cfunc_fmul(MMFLOAT a, MMFLOAT b) { return a * b; }
++static MMFLOAT CSUB_PCS cfunc_fadd(MMFLOAT a, MMFLOAT b) { return a + b; }
++static MMFLOAT CSUB_PCS cfunc_fsub(MMFLOAT a, MMFLOAT b) { return a - b; }
++static MMFLOAT CSUB_PCS cfunc_fdiv(MMFLOAT a, MMFLOAT b) { return a / b; }
++static int CSUB_PCS cfunc_fcmp(MMFLOAT a, MMFLOAT b) { return (a > b) - (a < b); }
++static MMFLOAT CSUB_PCS cfunc_load_float(unsigned long long c) {
++    union {
++        unsigned long long i;
++        MMFLOAT f;
++    } u;
++    u.i = c;
++    return u.f;
++}
++static int CSUB_PCS cfunc_idiv(int a, int b) { return a / b; }
++static MMFLOAT CSUB_PCS cfunc_sin(MMFLOAT a) { return sin(a); }
++static MMFLOAT CSUB_PCS cfunc_cos(MMFLOAT a) { return cos(a); }
++static MMFLOAT CSUB_PCS cfunc_sqrt(MMFLOAT a) { return sqrt(a); }
++static MMFLOAT CSUB_PCS cfunc_atan2(MMFLOAT a, MMFLOAT b) { return atan2(a, b); }
++static MMFLOAT CSUB_PCS cfunc_pow(MMFLOAT a, MMFLOAT b) { return pow(a, b); }
++static float CSUB_PCS cfunc_sadd(float a, float b) { return a + b; }
++static float CSUB_PCS cfunc_ssub(float a, float b) { return a - b; }
++static float CSUB_PCS cfunc_smul(float a, float b) { return a * b; }
++static float CSUB_PCS cfunc_sdiv(float a, float b) { return a / b; }
++static int CSUB_PCS cfunc_scmp(float a, float b) { return (a > b) - (a < b); }
++static float CSUB_PCS cfunc_sinf(float a) { return sinf(a); }
++static float CSUB_PCS cfunc_cosf(float a) { return cosf(a); }
++static float CSUB_PCS cfunc_sqrtf(float a) { return sqrtf(a); }
++static float CSUB_PCS cfunc_atan2f(float a, float b) { return atan2f(a, b); }
++static float CSUB_PCS cfunc_powf(float a, float b) { return powf(a, b); }
++static float CSUB_PCS cfunc_dtos(double a) { return (float) a; }
++static double CSUB_PCS cfunc_stod(float a) { return (double) a; }
++static long long CSUB_PCS cfunc_stoi(float a) { return (long long) (a >= 0 ? a + 0.5f : a - 0.5f); }
++static float CSUB_PCS cfunc_itos(long long a) { return (float) a; }
++
++const void *const CallTable[] = {
++    (void *) cfunc_usec,             /* 0x00 */
++    (void *) cfunc_unsupported,      /* 0x04 putConsole */
++    (void *) console_getc,           /* 0x08 */
++    (void *) cfunc_unsupported,      /* 0x0c ExtCfg */
++    (void *) cfunc_unsupported,      /* 0x10 ExtSet */
++    (void *) cfunc_unsupported,      /* 0x14 ExtInp */
++    (void *) cfunc_pinsetbit,        /* 0x18 */
++    (void *) cfunc_pinread,          /* 0x1c */
++    (void *) console_puts,           /* 0x20 */
++    (void *) IntToStr,               /* 0x24 */
++    (void *) CheckAbort,             /* 0x28 */
++    (void *) GetMemory,              /* 0x2c */
++    (void *) GetTempMemory,          /* 0x30 */
++    (void *) FreeMemory,             /* 0x34 */
++    (void *) cfunc_draw_rectangle,   /* 0x38 */
++    (void *) cfunc_draw_bitmap,      /* 0x3c */
++    (void *) cfunc_draw_line,        /* 0x40 */
++    (void *) FontTable,              /* 0x44 */
++    (void *) cfunc_unsupported,      /* 0x48 ExtCurrentConfig */
++    (void *) &hres_value,            /* 0x4c */
++    (void *) &vres_value,            /* 0x50 */
++    (void *) cfunc_unsupported,      /* 0x54 SoftReset */
++    (void *) cfunc_unsupported,      /* 0x58 */
++    (void *) ProgMemory,             /* 0x5c */
++    (void *) vartbl,                 /* 0x60 */
++    (void *) &varcnt,                /* 0x64 */
++    (void *) NULL,                   /* 0x68 DrawBuffer */
++    (void *) NULL,                   /* 0x6c ReadBuffer */
++    (void *) FloatToStr,             /* 0x70 */
++    (void *) cfunc_unsupported,      /* 0x74 CallExecuteProgram */
++    (void *) &cfunc_msec,            /* 0x78 */
++    (void *) cfunc_ram,              /* 0x7c */
++    (void *) cfunc_unsupported,      /* 0x80 ScrollLCD */
++    (void *) cfunc_int_to_float,     /* 0x84 */
++    (void *) cfunc_float_to_int64,   /* 0x88 */
++    (void *) &mmb_options,           /* 0x8c */
++    (void *) cfunc_sin,              /* 0x90 */
++    (void *) cfunc_draw_circle,      /* 0x94 */
++    (void *) cfunc_draw_triangle,    /* 0x98 */
++    (void *) &usec_timer_value,      /* 0x9c */
++    (void *) cfunc_fmul,             /* 0xa0 */
++    (void *) cfunc_fadd,             /* 0xa4 */
++    (void *) cfunc_fsub,             /* 0xa8 */
++    (void *) cfunc_fdiv,             /* 0xac */
++    (void *) cfunc_fcmp,             /* 0xb0 */
++    (void *) cfunc_load_float,       /* 0xb4 */
++    (void *) &cfunc_int1,            /* 0xb8 */
++    (void *) &cfunc_int2,            /* 0xbc */
++    (void *) &csub_complete,         /* 0xc0 */
++    (void *) &audio_output,          /* 0xc4 */
++    (void *) cfunc_idiv,             /* 0xc8 */
++    (void *) &audio_wrap,            /* 0xcc */
++    (void *) &cfunc_int3,            /* 0xd0 */
++    (void *) &cfunc_int4,            /* 0xd4 */
++    (void *) cfunc_unsupported,      /* 0xd8 PIOExecute */
++    (void *) NULL,                   /* 0xdc WriteBuf */
++    (void *) NULL,                   /* 0xe0 FrameBuf */
++    (void *) NULL,                   /* 0xe4 LayerBuf */
++    (void *) NULL,                   /* 0xe8 DisplayBuf */
++    (void *) cfunc_draw_pixel,       /* 0xec */
++    (void *) cfunc_display_refresh,  /* 0xf0 */
++    (void *) cfunc_cos,              /* 0xf4 */
++    (void *) cfunc_sqrt,             /* 0xf8 */
++    (void *) cfunc_atan2,            /* 0xfc */
++    (void *) cfunc_pow,              /* 0x100 */
++    (void *) cfunc_sadd,             /* 0x104 */
++    (void *) cfunc_ssub,             /* 0x108 */
++    (void *) cfunc_smul,             /* 0x10c */
++    (void *) cfunc_sdiv,             /* 0x110 */
++    (void *) cfunc_scmp,             /* 0x114 */
++    (void *) cfunc_sinf,             /* 0x118 */
++    (void *) cfunc_cosf,             /* 0x11c */
++    (void *) cfunc_sqrtf,            /* 0x120 */
++    (void *) cfunc_atan2f,           /* 0x124 */
++    (void *) cfunc_powf,             /* 0x128 */
++    (void *) cfunc_dtos,             /* 0x12c */
++    (void *) cfunc_stod,             /* 0x130 */
++    (void *) cfunc_stoi,             /* 0x134 */
++    (void *) cfunc_itos,             /* 0x138 */
++};
++
++MMINTEGER cfunction_luckfox_calltable_addr(void) {
++    cfunction_refresh_display_values();
++    return (MMINTEGER) (uintptr_t) CallTable;
++}
++
++static uint32_t *FindCFunctionRecord(const char *records, const char *cmd_ptr) {
++    char *p = (char *) records;
++    while (*((uint64_t *) p) != 0xFFFFFFFFFFFFFFFFULL) {
++        uintptr_t addr = (uintptr_t) *((uint64_t *) p);
++        uint32_t size = *((uint32_t *) (p + 8));
++        if ((const char *) addr == cmd_ptr) return (uint32_t *) (p + 8);
++        p += 8 + 4 + size;
++        while ((uintptr_t) p % 8 != 0) p++;
++    }
++    return (uint32_t *) p;
++}
++
++static void cfunction_make_progmem_executable(void) {
++    static bool mprotect_done = false;
++    long page_size = sysconf(_SC_PAGESIZE);
++    if (page_size <= 0) error_throw_ex(kError, "Could not determine system page size");
++
++    uintptr_t start = (uintptr_t) ProgMemory & ~((uintptr_t) page_size - 1);
++    uintptr_t end = ((uintptr_t) ProgMemory + PROG_FLASH_SIZE + (uintptr_t) page_size - 1)
++            & ~((uintptr_t) page_size - 1);
++
++    if (!mprotect_done) {
++        if (mprotect((void *) start, end - start, PROT_READ | PROT_WRITE | PROT_EXEC) != 0) {
++            error_throw_ex(kError, "Could not make CSUB memory executable");
++        }
++        mprotect_done = true;
++    }
++    __builtin___clear_cache((char *) start, (char *) end);
++}
++
++static void cfunction_get_arg_types(const char *defp, int typ[10]) {
++    char buf[STRINGSIZE];
++    char argbuf[STRINGSIZE + STRINGSIZE / 2];
++    char *argv[19];
++    int argc = 0;
++    char *out = buf;
++
++    if (*defp == '(') defp++;
++    while (*defp && *defp != ')' && *defp != SINGLE_QUOTE) *out++ = *defp++;
++    *out = '\0';
++
++    const char *p = buf;
++    skipspace(p);
++    if (!*p) return;
++
++    makeargs(&p, 19, argbuf, argv, &argc, ",");
++    for (int i = 0; i < argc && i < 19; i += 2) {
++        CheckIfTypeSpecified(argv[i], &typ[i / 2], true);
++        typ[i / 2] &= ~T_IMPLIED;
++    }
++}
++
++long long int CallCFunction(
++        const char *CmdPtr,
++        const char *ArgList,
++        const char *DefP,
++        const char *CallersLinePtr) {
++    void *arg[10] = { NULL };
++    int typ[10] = { 0 };
++    long long int i64[10] = { 0 };
++    MMFLOAT ff[10] = { 0 };
++    char *sp = NULL;
++    int type = 0;
++
++    uint32_t *p = FindCFunctionRecord(CFunctionFlash, CmdPtr);
++    if (*p == 0xFFFFFFFF && CFunctionLibrary != NULL) {
++        p = FindCFunctionRecord(CFunctionLibrary, CmdPtr);
++    }
++    if (*p == 0xFFFFFFFF) ERROR_INTERNAL_FAULT;
++
++    cfunction_get_arg_types(DefP, typ);
++
++    CurrentLinePtr = CallersLinePtr;
++    if (*ArgList == '(') ArgList++;
++    skipspace(ArgList);
++    if (*ArgList != ')' && *ArgList != '\0') {
++        char argbuf[STRINGSIZE + STRINGSIZE / 2];
++        char *argv[19];
++        int argc = 0;
++        makeargs(&ArgList, 19, argbuf, argv, &argc, ",");
++        for (int i = 0; i < argc && i < 19; i += 2) {
++            char *argp = argv[i];
++            const char *after_var = skipvar(argp, false);
++            bool is_plain_var = isnamestart(*argp)
++                    && (*after_var == '\0' || *after_var == ')')
++                    && !(FindSubFun(argp, kFunction) >= 0 && strchr(argp, '(') != NULL);
++            if (is_plain_var) {
++                arg[i / 2] = findvar(argp, V_FIND | V_EMPTY_OK);
++                if (typ[i / 2] != 0 && !(TypeMask(vartbl[VarIndex].type) & typ[i / 2])) {
++                    error_throw_ex(kError, "Incompatible type");
++                }
++            } else {
++                switch (typ[i / 2]) {
++                    case T_INT:
++                        i64[i / 2] = getinteger(argp);
++                        arg[i / 2] = &i64[i / 2];
++                        break;
++                    case T_NBR:
++                        ff[i / 2] = getnumber(argp);
++                        arg[i / 2] = &ff[i / 2];
++                        break;
++                    case T_STR:
++                        arg[i / 2] = GetTempStrMemory();
++                        Mstrcpy(arg[i / 2], getstring(argp));
++                        break;
++                    default:
++                        type = T_NOTYPE;
++                        evaluate(argp, &ff[i / 2], &i64[i / 2], &sp, &type, false);
++                        if (type & T_NBR) {
++                            arg[i / 2] = &ff[i / 2];
++                        } else if (type & T_INT) {
++                            arg[i / 2] = &i64[i / 2];
++                        } else {
++                            arg[i / 2] = GetTempStrMemory();
++                            Mstrcpy(arg[i / 2], sp);
++                        }
++                        break;
++                }
++            }
++        }
++    }
++
++    cfunction_refresh_display_values();
++    cfunction_make_progmem_executable();
++
++    p++;
++    uint32_t offset_words = *p++;
++    uintptr_t entry = (uintptr_t) (p + offset_words);
++#if defined(__arm__)
++    entry |= 0x1;
++#endif
++    typedef long long int (*CSubFn)(void *, void *, void *, void *, void *, void *, void *, void *, void *, void *);
++    return ((CSubFn) entry)(
++            arg[0], arg[1], arg[2], arg[3], arg[4], arg[5], arg[6], arg[7], arg[8], arg[9]);
++}
+--- a/src/common/cfunction_luckfox.h
++++ b/src/common/cfunction_luckfox.h
+@@ -0,0 +1,15 @@
++/* Luckfox/PicoCalc CSUB support for MMB4L. */
++
++#if !defined(MMB4L_CFUNCTION_LUCKFOX_H)
++#define MMB4L_CFUNCTION_LUCKFOX_H
++
++#include "../Configuration.h"
++
++MMINTEGER cfunction_luckfox_calltable_addr(void);
++long long int CallCFunction(
++        const char *CmdPtr,
++        const char *ArgList,
++        const char *DefP,
++        const char *CallersLinePtr);
++
++#endif
+--- a/src/core/MMBasic.c
++++ b/src/core/MMBasic.c
+@@ -58,6 +58,7 @@
+ #include "../common/gamepad.h"
+ #include "../common/gpio.h"
+ #include "../common/graphics.h"
++#include "../common/cfunction_luckfox.h"
+ #include "../common/parse.h"
+ #include "../common/utility.h"
+
+@@ -557,11 +558,13 @@
+     // p   = the argument list for the definition
+     skipspace(tp); skipspace(p);
+
+-#if defined(MICROMITE)
+-    const CommandToken cmd = commandtbl_decode(SubLinePtr);
++#if defined(MICROMITE) || defined(MMB4L_LUCKFOX_CSUB)
++    const CommandToken def_cmd = commandtbl_decode(SubLinePtr);
++#endif
+
++#if defined(MICROMITE)
+     // if this is a CFUNCTION we can skip all the rest and just execute the CFUNCTION and return its value
+-    if (cmd == cmdCFUN) {
++    if (def_cmd == cmdCFUN) {
+         skipspace(p);
+         if(*p != '(')
+             *typ = T_INT;
+@@ -590,9 +593,11 @@
+         TempMemoryIsChanged = true;                                 // signal that temporary memory should be checked
+         return;
+     }
++#endif
+
++#if defined(MICROMITE) || defined(MMB4L_LUCKFOX_CSUB)
+     // similar if this is a CSUB
+-    if (cmd == cmdCSUB) {
++    if (def_cmd == cmdCSUB) {
+         CallCFunction(SubLinePtr, tp, p, CallersLinePtr);           // run the CSUB
+         TempMemoryIsChanged = true;                                 // signal that temporary memory should be checked
+         return;
+--- a/src/functions/fun_mminfo.c
++++ b/src/functions/fun_mminfo.c
+@@ -45,6 +45,7 @@
+ #include "../common/mmb4l.h"
+ #include "../common/console.h"
+ #include "../common/cstring.h"
++#include "../common/cfunction_luckfox.h"
+ #include "../common/flash.h"
+ #include "../common/fonttbl.h"
+ #include "../common/gamepad.h"
+@@ -80,7 +81,7 @@
+
+ static void mminfo_calltable(const char *p) {
+     if (!parse_is_end(p)) ERROR_SYNTAX;
+-    g_integer_rtn = 0;
++    g_integer_rtn = cfunction_luckfox_calltable_addr();
+     g_rtn_type = T_INT;
+ }

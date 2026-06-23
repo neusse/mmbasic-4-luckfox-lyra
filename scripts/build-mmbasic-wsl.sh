@@ -44,6 +44,8 @@ if ! command -v rsync >/dev/null 2>&1; then
   exit 1
 fi
 
+mkdir -p "$(dirname "$source_dir")"
+
 rsync -a --delete \
   --exclude .git \
   --exclude build \

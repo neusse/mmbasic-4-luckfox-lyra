@@ -1,0 +1,46 @@
+--- a/src/common/graphics.c
++++ b/src/common/graphics.c
+@@ -541,35 +541,40 @@ MmResult graphics_window_create(MmSurfaceId id, int width, int height, int x, in
+     // To allow for window decorations and window manager toolbars restrict
+     // desktop window dimensions to no more than 85% of the display dimensions.
+     float fscale = scale;
++    bool exact_framebuffer_window = false;
+     if (SUCCEEDED(result)) {
+         SDL_DisplayMode dm;
+         if (SUCCEEDED(SDL_GetCurrentDisplayMode(0, &dm))) {
+-            const bool exact_framebuffer_window = graphics_default_display_is_picocalc
++            exact_framebuffer_window = graphics_is_default_display_picocalc()
+                     && scale == 1 && width <= dm.w && height <= dm.h;
+             const float maxW = exact_framebuffer_window ? dm.w : 0.85 * dm.w;
+             const float maxH = exact_framebuffer_window ? dm.h : 0.85 * dm.h;
+             while ((float) width * fscale > maxW || (float) height * fscale > maxH) {
+                 fscale -= fscale > 2.0 ? 1.0 : 0.05;
+                 if (fscale < 0.5) return kGraphicsSurfaceTooLarge;
+             }
+         } else {
+             result = kGraphicsApiError;
+         }
+     }
+
+     // Determine the title for the window.
+     char *title2 = (char *) title;
+     if (SUCCEEDED(result) && !title2) {
+         title2 = GetTempStrMemory();
+         result = graphics_get_default_window_title(id, title2, STRINGSIZE);
+     }
+
+     // Create SDL window.
+     SDL_Window *window = NULL;
+     if (SUCCEEDED(result)) {
+-        window = SDL_CreateWindow(title2, x == -1 ? (int)SDL_WINDOWPOS_CENTERED : x,
+-                                  y == -1 ? (int)SDL_WINDOWPOS_CENTERED : y, width * fscale,
+-                                  height * fscale, show ? SDL_WINDOW_SHOWN : SDL_WINDOW_HIDDEN);
++        const int window_x = exact_framebuffer_window && x == -1 ? 0
++                : x == -1 ? (int) SDL_WINDOWPOS_CENTERED : x;
++        const int window_y = exact_framebuffer_window && y == -1 ? 0
++                : y == -1 ? (int) SDL_WINDOWPOS_CENTERED : y;
++        const uint32_t flags = (show ? SDL_WINDOW_SHOWN : SDL_WINDOW_HIDDEN)
++                | (exact_framebuffer_window ? SDL_WINDOW_BORDERLESS : 0);
++        window = SDL_CreateWindow(title2, window_x, window_y, width * fscale, height * fscale, flags);
+         if (!window) result = kGraphicsApiError;
+     }

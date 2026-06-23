@@ -162,6 +162,81 @@ What it changes:
 Upstream suitability: good. This is a general correction for 32-bit ARM Linux
 builds that does not require Luckfox-specific paths or runtime assumptions.
 
+### `0009-auto-create-picocalc-display-surface.patch`
+
+Purpose: make PicoCalc graphics work without requiring a desktop-style
+`GRAPHICS WINDOW` setup.
+
+Why it is needed: PicoMite programs commonly draw directly with `PIXEL`,
+`TEXT`, `LINE`, `BLIT`, image, sprite, and framebuffer commands. On Luckfox,
+those commands need an SDL2/DirectFB-backed 320x320 PicoCalc display surface
+created automatically when the target framebuffer is detected.
+
+What it changes:
+
+- Auto-creates/selects the PicoCalc display surface for implemented drawing,
+  image, BLIT, sprite, and framebuffer commands.
+- Adds `FRAMEBUFFER CREATE` / `FRAMEBUFFER WRITE F` compatibility for the
+  PicoCalc display surface mapping.
+- Adds `MM.INFO(CALLTABLE)` spelling, originally as a placeholder; the runtime
+  implementation is supplied by `0010`.
+- Adds DirectFB cleanup and PicoCalc display detection helpers.
+
+Upstream suitability: target-specific. The general auto-display idea may be
+useful upstream, but this patch includes Luckfox/PicoCalc detection and
+DirectFB behavior.
+
+### `0010-luckfox-csub-calltable-runtime.patch`
+
+Purpose: make PicoMite-style CSUBs usable on the Luckfox ARM build.
+
+Why it is needed: CSUBs that receive `MM.INFO(CALLTABLE)` need a real function
+pointer table, executable program memory, and a bridge from MMB4L's CSUB blob
+format into native ARM Thumb code. Returning `0` for `CALLTABLE` lets BASIC
+parse but breaks real CSUBs.
+
+What it changes:
+
+- Enables CSUB dispatch for ARM Luckfox builds.
+- Adds a PicoMite-offset-compatible call table for core memory, math/float,
+  timer, and basic drawing helpers.
+- Uses ARM AAPCS wrappers for float helper entries so PicoMite-style CSUBs can
+  call them from hard-float Linux builds.
+- Marks the program-memory range executable before CSUB dispatch.
+- Returns the real call table address from `MM.INFO(CALLTABLE)`.
+
+Current limitations:
+
+- GPIO, PIO, audio, reset, low-level display-buffer, and execute-program style
+  table entries are placeholders until the corresponding Linux/PicoCalc
+  backends are designed.
+- This is intended for Luckfox ARM builds, not desktop MMB4L.
+
+Upstream suitability: low as-is. It is useful for this target, but general
+upstream support would need architecture gates, security review, and a broader
+CSUB ABI policy for Linux.
+
+### `0011-picocalc-explicit-window-fullscreen.patch`
+
+Purpose: keep explicit 320x320 PicoCalc graphics windows from being shrunk and
+centered by MMB4L's desktop fit rule.
+
+Why it is needed: `graphics_ensure_default_display()` already probes the
+PicoCalc framebuffer before creating the auto-display window. But an explicit
+`GRAPHICS WINDOW 0, 320, 320, ... , 1` can reach `graphics_window_create()`
+before that probe runs. The old desktop rule then limits the window to 85% of
+the display and places a smaller square in the center of the PicoCalc screen.
+
+What it changes:
+
+- Probes the PicoCalc framebuffer inside `graphics_window_create()`.
+- Allows exact 320x320 scale-1 windows to use the full framebuffer.
+- Places omitted x/y exact framebuffer windows at `(0,0)`.
+- Requests a borderless SDL window for exact PicoCalc framebuffer windows.
+
+Upstream suitability: target-specific. The broader issue may deserve an
+upstream option for full-screen embedded SDL targets.
+
 ## Patch Rules
 
 - Keep upstream `mmb4l/` as a clean submodule checkout whenever possible.

@@ -1,0 +1,9 @@
+no-cursor
+system=fbdev
+fbdev=/dev/fb0
+wm=default
+mode=320x320
+depth=16
+pixelformat=RGB16
+no-vt
+no-vt-switch
