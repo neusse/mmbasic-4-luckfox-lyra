@@ -27,6 +27,28 @@ Extracted comparison files are in:
 - Linux platform work should adapt the PicoMite feature to Luckfox/PicoCalc, not reclassify it away. A feature can be blocked by a missing backend, unsafe pin ownership, or token-table architecture, but it stays in the target gap unless it is proven not applicable.
 - WiFi and graphics are in scope. GPIO, I2C, SPI, and other IO are in scope after display/input are stable and the PicoCalc pin/bus safety map is proven.
 
+## Luckfox Network Policy
+
+Linux owns WiFi configuration on Luckfox. MMBasic should inspect network state
+and provide program networking, but it should not directly configure SSIDs,
+passwords, AP mode, DHCP, routing, or time synchronization.
+
+Initial WebMite compatibility for this policy is read-only:
+
+- `MM.INFO$(IP ADDRESS)` / `MM.INFO(IP ADDRESS)` reports the preferred wireless
+  IPv4 address, then the first non-loopback IPv4 address, or `0.0.0.0`.
+- `MM.INFO(WIFI STATUS)` reports whether a wireless interface is up.
+- `MM.INFO(TCPIP STATUS)` reports whether TCP/IP is ready, WiFi-only, or down.
+- `WEB SCAN` lists visible WiFi SSIDs using the Linux wireless stack.
+
+Deferred or intentionally omitted from this network slice:
+
+- Telnet, TFTP, NTP, and `OPTION WEB MESSAGES`.
+- WiFi reconfiguration commands such as `OPTION WIFI` and parameterized
+  `WEB CONNECT`.
+- TCP, UDP, HTTP, MQTT, and WebSocket program I/O commands, which need separate
+  Linux socket backends.
+
 ## Initial Feature Decisions
 
 | Feature | Kind | Manual Source | Current Luckfox Status | Token Cost | Backend Needed | Decision |

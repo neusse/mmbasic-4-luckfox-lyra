@@ -237,6 +237,35 @@ What it changes:
 Upstream suitability: target-specific. The broader issue may deserve an
 upstream option for full-screen embedded SDL targets.
 
+### `0012-luckfox-network-status.patch`
+
+Purpose: add the first read-only WebMite-style network status surface for the
+Luckfox/PicoCalc Linux target.
+
+Why it is needed: WebMite programs can inspect network state from BASIC, but on
+Luckfox the operating system should own WiFi configuration. The interpreter
+therefore needs a Linux-backed status bridge without trying to manage SSIDs,
+passwords, AP mode, DHCP, routing, or time synchronization itself.
+
+What it changes:
+
+- Adds Linux helpers for wireless interface detection, IPv4 status, and WiFi
+  scanning.
+- Adds `MM.INFO$(IP ADDRESS)` / `MM.INFO(IP ADDRESS)`.
+- Adds `MM.INFO(WIFI STATUS)`.
+- Adds `MM.INFO(TCPIP STATUS)`.
+- Adds `WEB SCAN` as a read-only scan command backed by Linux `iw`.
+
+Current limitations:
+
+- `OPTION WIFI`, `WEB CONNECT` configuration, Telnet, TFTP, NTP, and
+  `OPTION WEB MESSAGES` are intentionally not implemented in this slice.
+- Program network I/O such as TCP, UDP, HTTP, MQTT, and WebSocket support still
+  needs separate Linux socket backends.
+
+Upstream suitability: low as-is. The policy is correct for Luckfox, but the
+implementation depends on Linux wireless tooling and should stay target-gated.
+
 ## Patch Rules
 
 - Keep upstream `mmb4l/` as a clean submodule checkout whenever possible.

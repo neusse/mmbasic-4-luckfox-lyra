@@ -1,0 +1,368 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 9188f50..80b0541 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -130,6 +130,7 @@ set(MMB4L_COMMANDS_SOURCE_FILES
+     src/commands/cmd_timer.c
+     src/commands/cmd_trace.c
+     src/commands/cmd_triangle.c
++    src/commands/cmd_web.c
+     src/commands/cmd_xmodem.c
+ )
+ 
+@@ -198,6 +199,7 @@ set(MMB4L_COMMON_SOURCE_FILES
+     src/common/graphics.c
+     src/common/interrupt.c
+     src/common/keyboard.c
++    src/common/linux_network.c
+     src/common/memory.c
+     src/common/mmgetline.c
+     src/common/mmresult.c
+diff --git a/src/commands/cmd_web.c b/src/commands/cmd_web.c
+new file mode 100644
+index 0000000..ab559a3
+--- /dev/null
++++ b/src/commands/cmd_web.c
+@@ -0,0 +1,29 @@
++/*-*****************************************************************************
++
++MMBasic for Linux (MMB4L)
++
++cmd_web.c
++
++Copyright 2021-2025 Geoff Graham, Peter Mather and Thomas Hugo Williams.
++
++*******************************************************************************/
++
++#include "../common/mmb4l.h"
++#include "../common/error.h"
++#include "../common/linux_network.h"
++#include "../common/parse.h"
++#include "../common/utility.h"
++
++static void cmd_web_scan(const char *p) {
++    if (!parse_is_end(p)) ERROR_SYNTAX;
++    ON_FAILURE_ERROR(linux_network_scan_wifi());
++}
++
++void cmd_web(void) {
++    const char *p;
++    if ((p = checkstring(cmdline, "SCAN"))) {
++        cmd_web_scan(p);
++    } else {
++        ERROR_UNKNOWN_SUBCOMMAND("WEB");
++    }
++}
+diff --git a/src/common/linux_network.c b/src/common/linux_network.c
+new file mode 100644
+index 0000000..f858fcf
+--- /dev/null
++++ b/src/common/linux_network.c
+@@ -0,0 +1,180 @@
++#include "linux_network.h"
++
++#include "console.h"
++#include "cstring.h"
++#include "utility.h"
++
++#include <arpa/inet.h>
++#include <ctype.h>
++#include <errno.h>
++#include <ifaddrs.h>
++#include <net/if.h>
++#include <stdbool.h>
++#include <stdio.h>
++#include <stdlib.h>
++#include <string.h>
++#include <sys/socket.h>
++#include <unistd.h>
++
++static bool linux_network_is_wireless_name(const char *name) {
++    return strncmp(name, "wlan", 4) == 0 || strncmp(name, "wl", 2) == 0;
++}
++
++static bool linux_network_interface_is_up(const char *name) {
++    char path[128];
++    snprintf(path, sizeof(path), "/sys/class/net/%s/operstate", name);
++    FILE *f = fopen(path, "r");
++    if (!f) return false;
++
++    char state[16] = { 0 };
++    bool up = fgets(state, sizeof(state), f) && strncmp(state, "up", 2) == 0;
++    fclose(f);
++    return up;
++}
++
++static MmResult linux_network_get_ipv4_for_interface(
++        const char *preferred_iface,
++        bool prefer_wireless,
++        char *buf,
++        size_t buf_sz) {
++    struct ifaddrs *ifaddr = NULL;
++    if (getifaddrs(&ifaddr) == -1) return errno;
++
++    bool found = false;
++    for (struct ifaddrs *ifa = ifaddr; ifa; ifa = ifa->ifa_next) {
++        if (!ifa->ifa_addr || ifa->ifa_addr->sa_family != AF_INET) continue;
++        if (!(ifa->ifa_flags & IFF_UP) || (ifa->ifa_flags & IFF_LOOPBACK)) continue;
++        if (preferred_iface && strcmp(ifa->ifa_name, preferred_iface) != 0) continue;
++        if (prefer_wireless && !linux_network_is_wireless_name(ifa->ifa_name)) continue;
++
++        const struct sockaddr_in *addr = (const struct sockaddr_in *) ifa->ifa_addr;
++        if (!inet_ntop(AF_INET, &addr->sin_addr, buf, buf_sz)) {
++            freeifaddrs(ifaddr);
++            return errno;
++        }
++        found = true;
++        break;
++    }
++
++    freeifaddrs(ifaddr);
++    if (!found) {
++        if (cstring_cpy(buf, "0.0.0.0", buf_sz)) return kStringTooLong;
++    }
++    return kOk;
++}
++
++MmResult linux_network_get_ip_address(char *buf, size_t buf_sz) {
++    MmResult result = linux_network_get_ipv4_for_interface(NULL, true, buf, buf_sz);
++    if (FAILED(result)) return result;
++    if (strcmp(buf, "0.0.0.0") != 0) return kOk;
++    return linux_network_get_ipv4_for_interface(NULL, false, buf, buf_sz);
++}
++
++MmResult linux_network_get_wireless_interface(char *buf, size_t buf_sz) {
++    FILE *f = fopen("/proc/net/wireless", "r");
++    if (f) {
++        char line[256];
++        while (fgets(line, sizeof(line), f)) {
++            char *colon = strchr(line, ':');
++            if (!colon) continue;
++            *colon = '\0';
++            char *name = cstring_trim(line);
++            if (*name && linux_network_interface_is_up(name)) {
++                MmResult result = cstring_cpy(buf, name, buf_sz) ? kStringTooLong : kOk;
++                fclose(f);
++                return result;
++            }
++        }
++        fclose(f);
++    }
++
++    struct ifaddrs *ifaddr = NULL;
++    if (getifaddrs(&ifaddr) == -1) return errno;
++
++    bool found = false;
++    for (struct ifaddrs *ifa = ifaddr; ifa; ifa = ifa->ifa_next) {
++        if (!ifa->ifa_name || !linux_network_is_wireless_name(ifa->ifa_name)) continue;
++        if (!(ifa->ifa_flags & IFF_UP)) continue;
++        if (cstring_cpy(buf, ifa->ifa_name, buf_sz)) {
++            freeifaddrs(ifaddr);
++            return kStringTooLong;
++        }
++        found = true;
++        break;
++    }
++    freeifaddrs(ifaddr);
++
++    if (!found) {
++        if (cstring_cpy(buf, "", buf_sz)) return kStringTooLong;
++    }
++    return kOk;
++}
++
++MmResult linux_network_get_wifi_status(int *status) {
++    char iface[IFNAMSIZ] = { 0 };
++    MmResult result = linux_network_get_wireless_interface(iface, sizeof(iface));
++    if (FAILED(result)) return result;
++    *status = iface[0] ? 1 : 0;
++    return kOk;
++}
++
++MmResult linux_network_get_tcpip_status(int *status) {
++    char ip[INET_ADDRSTRLEN] = { 0 };
++    MmResult result = linux_network_get_ip_address(ip, sizeof(ip));
++    if (FAILED(result)) return result;
++    if (strcmp(ip, "0.0.0.0") != 0) {
++        *status = kLinuxNetworkTcpIpHasIp;
++        return kOk;
++    }
++
++    int wifi = 0;
++    result = linux_network_get_wifi_status(&wifi);
++    if (FAILED(result)) return result;
++    *status = wifi ? kLinuxNetworkTcpIpWifiNoIp : kLinuxNetworkTcpIpDown;
++    return kOk;
++}
++
++static bool linux_network_line_starts_with_ssid(const char *line, const char **ssid) {
++    while (isspace((unsigned char) *line)) line++;
++    if (strncmp(line, "SSID:", 5) != 0) return false;
++    line += 5;
++    while (*line == ' ' || *line == '\t') line++;
++    *ssid = line;
++    return true;
++}
++
++MmResult linux_network_scan_wifi(void) {
++    char iface[IFNAMSIZ] = { 0 };
++    MmResult result = linux_network_get_wireless_interface(iface, sizeof(iface));
++    if (FAILED(result)) return result;
++    if (!iface[0]) return kUnsupportedOnCurrentDevice;
++
++    char command[128];
++    snprintf(command, sizeof(command), "iw dev %s scan 2>/dev/null", iface);
++    FILE *f = popen(command, "r");
++    if (!f) return errno;
++
++    char line[512];
++    int count = 0;
++    while (fgets(line, sizeof(line), f)) {
++        const char *ssid = NULL;
++        if (!linux_network_line_starts_with_ssid(line, &ssid)) continue;
++
++        char clean[STRINGSIZE];
++        if (cstring_cpy(clean, ssid, sizeof(clean))) {
++            pclose(f);
++            return kStringTooLong;
++        }
++        cstring_trim(clean);
++        if (!clean[0]) continue;
++
++        console_puts(clean);
++        console_puts("\r\n");
++        count++;
++    }
++
++    int rc = pclose(f);
++    if (rc == -1) return errno;
++    if (count == 0) console_puts("No WiFi networks found\r\n");
++    return kOk;
++}
+diff --git a/src/common/linux_network.h b/src/common/linux_network.h
+new file mode 100644
+index 0000000..e3d8e18
+--- /dev/null
++++ b/src/common/linux_network.h
+@@ -0,0 +1,21 @@
++#if !defined(MMB4L_LINUX_NETWORK_H)
++#define MMB4L_LINUX_NETWORK_H
++
++#include "mmresult.h"
++
++#include <stdbool.h>
++#include <stddef.h>
++
++typedef enum {
++    kLinuxNetworkTcpIpDown = 0,
++    kLinuxNetworkTcpIpWifiNoIp = 2,
++    kLinuxNetworkTcpIpHasIp = 3,
++} LinuxNetworkTcpIpStatus;
++
++MmResult linux_network_get_ip_address(char *buf, size_t buf_sz);
++MmResult linux_network_get_wifi_status(int *status);
++MmResult linux_network_get_tcpip_status(int *status);
++MmResult linux_network_get_wireless_interface(char *buf, size_t buf_sz);
++MmResult linux_network_scan_wifi(void);
++
++#endif
+diff --git a/src/core/commandtbl.c b/src/core/commandtbl.c
+index 35233e1..fcf9d21 100644
+--- a/src/core/commandtbl.c
++++ b/src/core/commandtbl.c
+@@ -180,6 +180,7 @@ const struct s_tokentbl commandtbl[] = {
+     { "Triangle",    T_CMD,              0, cmd_triangle },
+     { "TrOff",       T_CMD,              0, cmd_troff    },
+     { "TrOn",        T_CMD,              0, cmd_tron     },
++    { "Web",         T_CMD,              0, cmd_web      },
+     { "Wend",        T_CMD,              0, cmd_loop     },
+     { "While",       T_CMD,              0, cmd_do       },
+     { "XModem",      T_CMD,              0, cmd_xmodem   },
+diff --git a/src/core/commandtbl.h b/src/core/commandtbl.h
+index 51390ae..816f00f 100644
+--- a/src/core/commandtbl.h
++++ b/src/core/commandtbl.h
+@@ -174,6 +174,7 @@ void cmd_trace(void);
+ void cmd_triangle(void);
+ void cmd_troff(void);
+ void cmd_tron(void);
++void cmd_web(void);
+ void cmd_xmodem(void);
+ 
+ void commandtbl_init();
+diff --git a/src/functions/fun_mminfo.c b/src/functions/fun_mminfo.c
+index 80cf20f..f2d12ae 100644
+--- a/src/functions/fun_mminfo.c
++++ b/src/functions/fun_mminfo.c
+@@ -52,6 +52,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ #include "../common/gpio.h"
+ #include "../common/graphics.h"
+ #include "../common/keyboard.h"
++#include "../common/linux_network.h"
+ #include "../common/mmtime.h"
+ #include "../common/parse.h"
+ #include "../common/path.h"
+@@ -359,6 +360,14 @@ static void mminfo_line(const char *p) {
+     CtoM(sret);
+ }
+ 
++static void mminfo_ip_address(const char *p) {
++    if (!parse_is_end(p)) ERROR_SYNTAX;
++    g_string_rtn = GetTempStrMemory();
++    g_rtn_type = T_STR;
++    ON_FAILURE_ERROR(linux_network_get_ip_address(g_string_rtn, STRINGSIZE));
++    CtoM(g_string_rtn);
++}
++
+ static void mminfo_option(const char *p) {
+     OptionsDefinition *def = NULL;
+     for (def = options_definitions; def->name; def++) {
+@@ -536,6 +545,22 @@ static void mminfo_writebuff(const char *p) {
+                    "MMB4L does not support direct access to display WriteBuff");
+ }
+ 
++static void mminfo_tcpip_status(const char *p) {
++    if (!parse_is_end(p)) ERROR_SYNTAX;
++    int status = 0;
++    ON_FAILURE_ERROR(linux_network_get_tcpip_status(&status));
++    g_integer_rtn = status;
++    g_rtn_type = T_INT;
++}
++
++static void mminfo_wifi_status(const char *p) {
++    if (!parse_is_end(p)) ERROR_SYNTAX;
++    int status = 0;
++    ON_FAILURE_ERROR(linux_network_get_wifi_status(&status));
++    g_integer_rtn = status;
++    g_rtn_type = T_INT;
++}
++
+ void fun_mminfo(void) {
+     const char *p;
+     if ((p = checkstring(ep, "ARCH"))) {
+@@ -582,6 +607,8 @@ void fun_mminfo(void) {
+         mminfo_hres(p);
+     } else if ((p = checkstring(ep, "HPOS"))) {
+         mminfo_hpos(p);
++    } else if ((p = checkstring(ep, "IP ADDRESS"))) {
++        mminfo_ip_address(p);
+     } else if ((p = checkstring(ep, "LINE"))) {
+         mminfo_line(p);
+     } else if ((p = checkstring(ep, "OPTION"))) {
+@@ -598,12 +625,16 @@ void fun_mminfo(void) {
+         mminfo_ps2(p);
+     } else if ((p = checkstring(ep, "SDCARD"))) {
+         mminfo_sdcard(p);
++    } else if ((p = checkstring(ep, "TCPIP STATUS"))) {
++        mminfo_tcpip_status(p);
+     } else if ((p = checkstring(ep, "VERSION"))) {
+         mminfo_version(p);
+     } else if ((p = checkstring(ep, "VRES"))) {
+         mminfo_vres(p);
+     } else if ((p = checkstring(ep, "VPOS"))) {
+         mminfo_vpos(p);
++    } else if ((p = checkstring(ep, "WIFI STATUS"))) {
++        mminfo_wifi_status(p);
+     } else if ((p = checkstring(ep, "WRITEBUFF"))) {
+         mminfo_writebuff(p);
+     } else {
