@@ -1,4 +1,5 @@
 # Local build outputs
+.worktrees/
 build/
 cmake-build-*/
 out/
