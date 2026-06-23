@@ -22,10 +22,29 @@ userland compiler, `arm-buildroot-linux-gnueabihf-gcc`.
 - Pixel format: RGB565
 - Bits per pixel: `16`
 - Stride: `640`
+- Observed default device permissions:
+  - `/dev/tty0`: `crw-rw---- root tty`
+  - `/dev/fb0`: `crw-rw---- root video`
 
 Stock MMB4L uses SDL2. The target has SDL2 runtime libraries, so SDL should be
 tested first. If SDL/DirectFB is not usable, a native framebuffer backend can be
 added later.
+
+For the current SDL2/DirectFB path, `/etc/directfbrc` should match
+`scripts/target/directfbrc`. The important target-specific settings are
+`system=fbdev`, `fbdev=/dev/fb0`, `mode=320x320`, `pixelformat=RGB16`,
+`no-vt`, and `no-vt-switch`.
+
+For non-root runs, changing `/dev/fb0` and `/dev/tty0` to mode `666` has been
+observed to avoid display permission errors and improve graphics stability:
+
+```sh
+chmod 666 /dev/fb0 /dev/tty0
+```
+
+This is a broad local workaround. A persistent image-level fix should use a
+device permission rule or user/group membership when the final target policy is
+defined.
 
 ## Keyboard/Input
 
@@ -62,6 +81,7 @@ commands expose hardware access.
 adb devices -l
 adb shell 'cat /etc/os-release; uname -a'
 adb shell 'cat /proc/fb; fbset -fb /dev/fb0'
+adb shell 'cat /etc/directfbrc; ls -l /dev/tty0 /dev/fb0'
 adb shell 'cat /proc/bus/input/devices'
 adb shell 'cat /proc/asound/cards; ls -l /dev/snd'
 adb shell 'ls -l /dev/gpiochip* /dev/i2c* /dev/spidev* 2>/dev/null'

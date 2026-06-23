@@ -55,6 +55,57 @@ default keeps the real binary under `/usr/local/bin`. The Luckfox image used for
 this project has `/usr/bin` in `PATH`, so the deploy script also creates
 `/usr/bin/mmbasic` and `/usr/bin/mmb4l-run-tests` links by default.
 
+## DirectFB Target Setup
+
+The PicoCalc graphics path uses SDL2 over DirectFB. The target must have the
+project DirectFB configuration installed at `/etc/directfbrc`; otherwise
+DirectFB can try to take over a virtual terminal and graphics can be less
+stable when launched from SSH/ADB or a nonstandard console.
+
+`scripts/deploy-mmbasic.ps1` installs `scripts/target/directfbrc` to
+`/etc/directfbrc` by default. If applying it manually, the file contents should
+be:
+
+```text
+no-cursor
+system=fbdev
+fbdev=/dev/fb0
+wm=default
+mode=320x320
+depth=16
+pixelformat=RGB16
+no-vt
+no-vt-switch
+```
+
+Manual apply command:
+
+```powershell
+adb push .\scripts\target\directfbrc /tmp/directfbrc
+adb shell 'cp /tmp/directfbrc /etc/directfbrc'
+```
+
+On the tested image, non-root display access was also stabilized by allowing
+the user process to read and write both `/dev/fb0` and `/dev/tty0`.
+The observed default ownership was:
+
+```text
+crw-rw----    1 root     tty         4,   0 Dec 31  1969 tty0
+crw-rw----    1 root     video      29,   0 Jun 23 10:46 fb0
+```
+
+The proven local workaround is:
+
+```powershell
+adb shell 'chmod 666 /dev/fb0 /dev/tty0'
+```
+
+This is intentionally documented as a device workaround, not a final security
+policy. It grants display/console access to every local process and may be
+reset when `/dev` is recreated at boot. A later image-level fix should prefer a
+proper user/group membership, `mdev`, or equivalent device-permission rule once
+the final Luckfox runtime policy is known.
+
 ## Run Tests On PicoCalc
 
 Fast install check:
