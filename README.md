@@ -1,4 +1,20 @@
-# MMB4L for Luckfox Lyra PicoCalc
+<p align="center">
+  <img src="docs/assets/mmbasic-luckfox-lyra-banner.svg" alt="MMB4L for Luckfox Lyra PicoCalc" width="100%">
+</p>
+
+<h1 align="center">MMB4L for Luckfox Lyra PicoCalc</h1>
+
+<p align="center">
+  PicoCalc-ready MMBasic on Linux with repeatable ARMv7 builds, graphics support, CSUB runtime work, and WebMite compatibility notes.
+</p>
+
+<p align="center">
+  <code>ARMv7 Linux</code>
+  <code>Luckfox Lyra</code>
+  <code>PicoCalc</code>
+  <code>MMB4L</code>
+  <code>DirectFB</code>
+</p>
 
 This repository is a repeatable build and documentation workspace for running
 MMB4L on a PicoCalc upgraded with a Luckfox Lyra Linux module.
@@ -111,6 +127,12 @@ powershell -ExecutionPolicy Bypass -File .\scripts\build-mmbasic.ps1
 
 See [docs/build-mmbasic.md](docs/build-mmbasic.md).
 
+## Compiled Binary
+
+A compiled ARMv7 Luckfox/PicoCalc binary is included at
+`dist/mmbasic-luckfox-lyra-armv7l`. Its checksum is recorded in
+`dist/SHA256SUMS`.
+
 Smoke test on the connected PicoCalc:
 
 ```powershell
@@ -144,6 +166,7 @@ repository as the repeatable build/documentation wrapper.
 - [docs/build-mmbasic.md](docs/build-mmbasic.md)
 - [docs/deploy.md](docs/deploy.md)
 - [docs/patches.md](docs/patches.md)
+- [docs/luckfox-networking.md](docs/luckfox-networking.md)
 - [docs/setup/windows-adb.md](docs/setup/windows-adb.md)
 - [docs/setup/wsl-cross-compiler.md](docs/setup/wsl-cross-compiler.md)
 
