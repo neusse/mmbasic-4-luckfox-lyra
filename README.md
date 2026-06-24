@@ -194,6 +194,7 @@ repository as the repeatable build/documentation wrapper.
 - [docs/deploy.md](docs/deploy.md)
 - [docs/picocalc-repl-usage.md](docs/picocalc-repl-usage.md)
 - [docs/patches.md](docs/patches.md)
+- [docs/future-patches.md](docs/future-patches.md)
 - [docs/luckfox-networking.md](docs/luckfox-networking.md)
 - [docs/setup/windows-adb.md](docs/setup/windows-adb.md)
 - [docs/setup/wsl-cross-compiler.md](docs/setup/wsl-cross-compiler.md)
