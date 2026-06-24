@@ -29,7 +29,7 @@ This document assigns logical ownership areas for the current source tree. "Owne
 | Audio | `Audio.c`, `Audio.h`, `VS1053.c`, `VS1053.h`, `vs1053b-patches.h`, `dr_wav.h`, `dr_mp3.h`, `dr_flac.h`, `hxcmod.c`, `hxcmod.h` | Audio playback, codecs, VS1053 support, sample/mod playback | Are buffers, interrupts, DMA/PWM/I2S, and storage reads coordinated? |
 | Networking and web | `MMMqtt.c`, `mqtt.c`, `MMTCPclient.c`, `MMtcpserver.c`, `MMtelnet.c`, `MMntp.c`, `MMudp.c`, `MMtftp.c`, `tftp.c`, `cJSON.c`, `cJSON.h`, `lwipopts.h`, `lwipopts_examples_common.h`, `mbedtls_config.h` | WebMite networking, MQTT, TCP server/client, Telnet, NTP, UDP, TFTP, TLS, JSON | Are lwIP, TLS, heap, stack, and CYW43 assumptions valid for Web variants? |
 | Third-party/library code | `ff*`, `lfs*`, `cJSON.*`, `dr_*.h`, `picojpeg.*`, `upng.*`, `re.*`, `aes.*`, `hxcmod.*` | Imported algorithms or protocol/library implementations | Prefer upstream-compatible patches and clear comments for local changes. |
-| Documentation and hardware artifacts | `README.md`, `docs/`, `PicoMite_User_Manual.pdf`, `Pico Computer/` | User manuals, reference documents, PCB/schematic/manufacturing files | Keep setup/build guidance aligned with current CMake variants and external dependency versions. |
+| Documentation and hardware artifacts | `README.md`, `docs/`, `docs/PicoMite_User_Manual.pdf`, `Pico Computer/` | User manuals, reference documents, PCB/schematic/manufacturing files | Keep setup/build guidance aligned with current CMake variants and external dependency versions. |
 
 ## Cross-Cutting Review Rules
 
@@ -90,4 +90,3 @@ boards/
 ```
 
 Do not move files until the build matrix can be checked automatically. The current flat layout is noisy, but broad moves without build coverage would create unnecessary risk.
-

@@ -4,10 +4,10 @@ This project uses upstream MMB4L as the base interpreter for Luckfox/PicoCalc. P
 
 ## Source Manuals
 
-- `C:\Users\georg\Codex_Projects\mmbasic-4-luckfox-lyra\MMBasic DOS Version Manual.pdf`
+- `docs/MMBasic DOS Version Manual.pdf`
   - MMBasic DOS/Windows Version User Manual
   - MMBasic Ver 5.05.05
-- `C:\Users\georg\Codex_Projects\mmbasic-4-luckfox-lyra\PicoMite_User_Manual.pdf`
+- `docs/PicoMite_User_Manual.pdf`
   - PicoMite User Manual
   - MMBasic Ver 6.02.01
   - Revision 2, 10 May 2026
