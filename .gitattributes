@@ -9,3 +9,4 @@ scripts/target/directfbrc text eol=lf
 dist/mmbasic-luckfox-lyra-armv7l binary
 dist/SHA256SUMS text eol=lf
 dist/*.tar.gz binary
+dist/*.zip binary

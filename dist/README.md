@@ -9,29 +9,26 @@ Target:
 - Runtime: Luckfox/PicoCalc Buildroot image
 - Install path used by this project: `/usr/local/bin/mmbasic`
 
-Verify the checksum before installing:
+Verify the checksums before installing:
 
 ```sh
-sha256sum mmbasic-luckfox-lyra-armv7l
+sha256sum -c SHA256SUMS
 ```
 
-Expected checksum:
+For a no-build install, use the ZIP release bundle:
 
 ```text
-cb57b8ad045c9a453f2ad4ce709242fc20fb59f8b23b9ad302d23ec3a8e147e2  mmbasic-luckfox-lyra-armv7l
-```
-
-For a no-build install, use the release bundle:
-
-```text
-mmbasic-luckfox-lyra-release.tar.gz
+mmbasic-luckfox-lyra-release.zip
 ```
 
 On the PicoCalc:
 
 ```sh
-tar xzf mmbasic-luckfox-lyra-release.tar.gz
+unzip mmbasic-luckfox-lyra-release.zip
 cd mmbasic-luckfox-lyra-release
 sh install-picocalc.sh
 mmb4l-run-tests
 ```
+
+The matching `.tar.gz` bundle is also included for systems where `tar` is more
+convenient than `unzip`.

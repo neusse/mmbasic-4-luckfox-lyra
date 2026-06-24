@@ -1,6 +1,7 @@
 param(
   [string]$OutputDir = 'dist',
-  [string]$PackageName = 'mmbasic-luckfox-lyra-release'
+  [string]$PackageName = 'mmbasic-luckfox-lyra-release',
+  [switch]$UseBuildBinary
 )
 
 $ErrorActionPreference = 'Stop'
@@ -33,10 +34,10 @@ foreach ($path in @($sourceRoot, $examplesDir, $testsDir, $sptoolsDir, $targetRu
 
 New-Item -ItemType Directory -Force -Path $outDir | Out-Null
 
-if (Test-Path -LiteralPath $buildBinary -PathType Leaf) {
+if ($UseBuildBinary -and (Test-Path -LiteralPath $buildBinary -PathType Leaf)) {
   Copy-Item -LiteralPath $buildBinary -Destination $standaloneBinary -Force
 } elseif (-not (Test-Path -LiteralPath $standaloneBinary -PathType Leaf)) {
-  throw "No binary found. Build first or provide $standaloneBinary."
+  throw "No binary found. Build first and rerun with -UseBuildBinary, or provide $standaloneBinary."
 }
 
 $workRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("mmb4l-release-" + [guid]::NewGuid().ToString('N'))
@@ -125,23 +126,29 @@ mmb4l-run-tests
   )
   [System.IO.File]::WriteAllText((Join-Path $bundleRoot 'SHA256SUMS'), (($bundleHashLines -join "`n") + "`n"))
 
-  $archive = Join-Path $outDir "$PackageName.tar.gz"
-  if (Test-Path -LiteralPath $archive) {
-    Remove-Item -LiteralPath $archive -Force
+  $tarArchive = Join-Path $outDir "$PackageName.tar.gz"
+  $zipArchive = Join-Path $outDir "$PackageName.zip"
+  foreach ($archive in @($tarArchive, $zipArchive)) {
+    if (Test-Path -LiteralPath $archive) {
+      Remove-Item -LiteralPath $archive -Force
+    }
   }
-  tar -czf $archive -C $workRoot $PackageName
+  tar -czf $tarArchive -C $workRoot $PackageName
   if ($LASTEXITCODE -ne 0) {
     throw "tar failed with exit code $LASTEXITCODE"
   }
+  Compress-Archive -Path $bundleRoot -DestinationPath $zipArchive -CompressionLevel Optimal
 
   $distHashLines = @(
     "$(Get-Sha256Lower $standaloneBinary)  mmbasic-luckfox-lyra-armv7l"
-    "$(Get-Sha256Lower $archive)  $PackageName.tar.gz"
+    "$(Get-Sha256Lower $tarArchive)  $PackageName.tar.gz"
+    "$(Get-Sha256Lower $zipArchive)  $PackageName.zip"
   )
   [System.IO.File]::WriteAllText((Join-Path $outDir 'SHA256SUMS'), (($distHashLines -join "`n") + "`n"))
 
   Write-Output "Wrote $standaloneBinary"
-  Write-Output "Wrote $archive"
+  Write-Output "Wrote $tarArchive"
+  Write-Output "Wrote $zipArchive"
   Write-Output "Wrote $(Join-Path $outDir 'SHA256SUMS')"
 } finally {
   if (Test-Path -LiteralPath $workRoot) {
