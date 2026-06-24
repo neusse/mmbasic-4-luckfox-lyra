@@ -56,6 +56,53 @@ default keeps the real binary under `/usr/local/bin`. The Luckfox image used for
 this project has `/usr/bin` in `PATH`, so the deploy script also creates
 `/usr/bin/mmbasic` and `/usr/bin/mmb4l-run-tests` links by default.
 
+## No-Build Release Bundle
+
+For users who only want to install the current tested build, use:
+
+```text
+dist/mmbasic-luckfox-lyra-release.tar.gz
+```
+
+Copy the archive to the PicoCalc, then run:
+
+```sh
+tar xzf mmbasic-luckfox-lyra-release.tar.gz
+cd mmbasic-luckfox-lyra-release
+sh install-picocalc.sh
+mmb4l-run-tests
+```
+
+The bundle installs the same target layout as `scripts/deploy-mmbasic.ps1`:
+
+- `mmbasic` to `/usr/local/bin/mmbasic`
+- `mmb4l-run-tests` to `/usr/local/bin/mmb4l-run-tests`
+- PATH-visible links under `/usr/bin`
+- examples, tests, PicoCalc tests, and `sptools` under
+  `/usr/local/share/mmb4l`
+- `directfbrc` to `/etc/directfbrc`
+
+By default, `install-picocalc.sh` also applies the current device-permission
+workaround:
+
+```sh
+chmod 666 /dev/fb0 /dev/tty0
+```
+
+Set `MMB4L_APPLY_DEVICE_PERMS=0` to skip that step. Set `MMB4L_RUN_SMOKE=0` to
+skip the installer's smoke test.
+
+To refresh the release bundle from the current build output:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\package-release.ps1
+```
+
+The packager prefers `build/mmb4l-luckfox-release/mmbasic` when present and
+falls back to the tracked `dist/mmbasic-luckfox-lyra-armv7l` binary otherwise.
+It uses `build/mmb4l-luckfox-source` for examples, tests, and `sptools` when
+available, matching the deploy script.
+
 ## DirectFB Target Setup
 
 The PicoCalc graphics path uses SDL2 over DirectFB. The target must have the
@@ -150,6 +197,15 @@ checks for:
 The runner exports `MMB4L_TEST_TARGET=picocalc-luckfox-lyra` so display-size
 tests assert the real 320x320 PicoCalc framebuffer instead of upstream desktop
 MMB4L simulation sizes.
+
+Each BASIC test file is also wrapped with a timeout so a hardware or networking
+operation cannot hang the entire health report. The default is 60 seconds per
+file:
+
+```sh
+MMB4L_TEST_TIMEOUT=120 mmb4l-run-tests
+MMB4L_TEST_TIMEOUT=0 mmb4l-run-tests
+```
 
 Cursor-position checks and DirectFB-backed simulation checks are disabled by
 default because they can corrupt the shell prompt or fail for non-root console

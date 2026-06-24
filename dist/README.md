@@ -18,5 +18,20 @@ sha256sum mmbasic-luckfox-lyra-armv7l
 Expected checksum:
 
 ```text
-138d77e0399bd73c417f9d8c22278c75eb80df63b78774d5831c02756f00b14c  mmbasic-luckfox-lyra-armv7l
+5329aa7debe5c164f5f81d56342095026b1aecc1ca09010fab7a9879babedea9  mmbasic-luckfox-lyra-armv7l
+```
+
+For a no-build install, use the release bundle:
+
+```text
+mmbasic-luckfox-lyra-release.tar.gz
+```
+
+On the PicoCalc:
+
+```sh
+tar xzf mmbasic-luckfox-lyra-release.tar.gz
+cd mmbasic-luckfox-lyra-release
+sh install-picocalc.sh
+mmb4l-run-tests
 ```

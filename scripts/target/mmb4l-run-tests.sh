@@ -4,6 +4,7 @@ set -eu
 MMBASIC=${MMBASIC:-/usr/local/bin/mmbasic}
 SHARE_DIR=${MMB4L_SHARE_DIR:-/usr/local/share/mmb4l}
 TEST_DIR=${MMB4L_TEST_DIR:-"$SHARE_DIR/tests"}
+TEST_TIMEOUT=${MMB4L_TEST_TIMEOUT:-60}
 
 usage() {
   cat <<'USAGE'
@@ -20,6 +21,8 @@ Environment:
   MMB4L_TEST_DIR   Installed test directory. Default: $MMB4L_SHARE_DIR/tests
   MMB4L_TEST_TARGET Target profile for patched upstream tests.
                     Default: picocalc-luckfox-lyra
+  MMB4L_TEST_TIMEOUT Per BASIC test timeout in seconds. Default: 60.
+                    Set to 0 to disable the timeout.
 
 With no test files, this runs all installed target tests: upstream tst*.bas
 files plus project PicoCalc tst*.bas files. Use --core for the smaller legacy
@@ -269,6 +272,36 @@ $entry
 }$entry"
 }
 
+run_basic_test() {
+  test_file=$1
+  if [ "$TEST_TIMEOUT" = "0" ] || ! command -v timeout >/dev/null 2>&1; then
+    if [ -n "$test_args" ]; then
+      "$MMBASIC" "$test_file" $test_args
+    else
+      "$MMBASIC" "$test_file"
+    fi
+    return $?
+  fi
+
+  if [ -n "$test_args" ]; then
+    timeout -k 5 "$TEST_TIMEOUT" "$MMBASIC" "$test_file" $test_args
+  else
+    timeout -k 5 "$TEST_TIMEOUT" "$MMBASIC" "$test_file"
+  fi
+}
+
+is_timeout_status() {
+  status=$1
+  case "$status" in
+  124|137|143)
+    [ "$TEST_TIMEOUT" != "0" ] && command -v timeout >/dev/null 2>&1
+    ;;
+  *)
+    return 1
+    ;;
+  esac
+}
+
 check_directfbrc() {
   name='system:/etc/directfbrc'
   if [ ! -f /etc/directfbrc ]; then
@@ -343,19 +376,19 @@ for test_file in $tests; do
   tee "$output_file" <"$output_pipe" &
   tee_pid=$!
   set +e
-  if [ -n "$test_args" ]; then
-    "$MMBASIC" "$test_file" $test_args >"$output_pipe" 2>&1 </dev/null
-    status=$?
-  else
-    "$MMBASIC" "$test_file" >"$output_pipe" 2>&1 </dev/null
-    status=$?
-  fi
+  run_basic_test "$test_file" >"$output_pipe" 2>&1 </dev/null
+  status=$?
   set -e
   wait "$tee_pid"
   rm -f "$output_pipe"
   if [ "$status" -ne 0 ]; then
-    echo "FAIL: $test_file exited with status $status"
-    add_fail "$test_file" "exited with status $status"
+    if is_timeout_status "$status"; then
+      echo "FAIL: $test_file timed out after ${TEST_TIMEOUT}s"
+      add_fail "$test_file" "timed out after ${TEST_TIMEOUT}s"
+    else
+      echo "FAIL: $test_file exited with status $status"
+      add_fail "$test_file" "exited with status $status"
+    fi
     rm -f "$output_file"
     continue
   fi
