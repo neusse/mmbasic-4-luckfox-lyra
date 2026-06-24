@@ -185,6 +185,13 @@ Run the full target health suite:
 mmb4l-run-tests
 ```
 
+Verify that text-mode `CLS` clears the physical console instead of blanking the
+DirectFB graphics surface:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\verify-picocalc-text-cls.ps1
+```
+
 With no arguments, the runner discovers and runs every installed `tst*.bas`
 under `/usr/local/share/mmb4l/tests`, including the upstream test files and the
 project PicoCalc tests under `tests/picocalc`. It also runs target health

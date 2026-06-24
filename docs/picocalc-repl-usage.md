@@ -52,9 +52,15 @@ Clears the terminal console.
 CLS
 ```
 
-In a BASIC program, clears the PicoCalc graphics display. At the immediate
-prompt, a bare `CLS` stays on the terminal when no graphics surface is already
-open.
+Clears the terminal console when no graphics surface is already open. After a
+graphics surface exists, bare `CLS` clears the active graphics surface.
+
+```basic
+CLS RGB(BLACK)
+```
+
+Creates/selects the PicoCalc graphics display when needed and clears it to the
+given colour.
 
 ```basic
 GRAPHICS CLOSE 0

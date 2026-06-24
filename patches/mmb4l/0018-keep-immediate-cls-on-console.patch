@@ -1,11 +1,11 @@
 diff --git a/src/commands/cmd_cls.c b/src/commands/cmd_cls.c
-index 7a2bfe2..0e879c9 100644
+index 7a2bfe2..de244bb 100644
 --- a/src/commands/cmd_cls.c
 +++ b/src/commands/cmd_cls.c
 @@ -62,6 +62,10 @@ static MmResult cmd_cls_default(const char *p) {
 
      if (!graphics_current) {
-+        if (!CurrentLinePtr && argc == 0) {
++        if (argc == 0) {
 +            console_clear();
 +            return kOk;
 +        }

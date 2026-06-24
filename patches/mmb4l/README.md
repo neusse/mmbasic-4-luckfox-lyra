@@ -367,22 +367,22 @@ also target an active graphics surface.
 
 ### `0018-keep-immediate-cls-on-console.patch`
 
-Purpose: keep bare `CLS` at the interactive MMBasic prompt from unexpectedly
-opening and clearing the PicoCalc graphics surface.
+Purpose: keep bare text-mode `CLS` from unexpectedly opening and clearing the
+PicoCalc graphics surface.
 
 Why it is needed: `0009` intentionally auto-creates the PicoCalc display for
 graphics commands so PicoMite programs can draw without explicit desktop-style
-setup. But when a user types plain `CLS` at the REPL before graphics is active,
-opening a blank `PicoCalc` window or blanking the framebuffer makes it look like
-the prompt has disappeared. The prompt is still in the launching terminal, but
-the behavior is confusing.
+setup. But when a program or REPL session uses plain `CLS` before graphics is
+active, opening a blank `PicoCalc` window or blanking the framebuffer hides
+subsequent terminal text. Text-mode programs expect `CLS` to clear the terminal
+and resume output at the top of the console.
 
 What it changes:
 
-- Bare immediate-mode `CLS` clears the console when no graphics surface exists.
-- Program `CLS` still auto-creates and clears the PicoCalc display.
-- Explicit graphics use from the REPL remains available through drawing
-  commands or coloured `CLS`.
+- Bare `CLS` clears the console when no graphics surface exists.
+- Bare `CLS` still clears graphics after a graphics surface exists.
+- Coloured `CLS` and drawing commands still auto-create the PicoCalc display
+  when needed.
 
 Upstream suitability: target-specific. This preserves MMB4L's terminal prompt
 expectations while keeping PicoCalc program compatibility.
