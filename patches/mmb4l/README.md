@@ -304,6 +304,26 @@ What it changes:
 Upstream suitability: low as-is. This follows the target-gated test profile
 used by the Luckfox PicoCalc runner.
 
+### `0015-accept-picomite-negative-line-width.patch`
+
+Purpose: support PicoMite-compatible negative `LINE` widths.
+
+Why it is needed: PicoMite documents `LINE x1, y1, x2, y2 [,[-] LW [, C]]`;
+negative `LW` centers the thickness on the line endpoints and applies to lines
+in all directions. MMB4L rejected scalar negative widths and ignored width for
+diagonal lines, which breaks PicoMite graphics programs such as clock faces
+that use `LINE ..., -2, colour`.
+
+What it changes:
+
+- Allows scalar and array `LINE` widths from `-100` to `100`.
+- Treats `0` as a no-op.
+- Renders negative widths as centered parallel 1-pixel lines, including
+  diagonal lines.
+
+Upstream suitability: good candidate. This is documented PicoMite syntax and
+keeps existing positive-width behavior unchanged.
+
 ## Patch Rules
 
 - Keep upstream `mmb4l/` as a clean submodule checkout whenever possible.
