@@ -17,6 +17,7 @@ $targetRunner = Join-Path $repoRoot 'scripts\target\mmb4l-run-tests.sh'
 $targetInstaller = Join-Path $repoRoot 'scripts\target\install-picocalc.sh'
 $directFbConfig = Join-Path $repoRoot 'scripts\target\directfbrc'
 $picocalcTests = Join-Path $repoRoot 'tests\picocalc'
+$replUsageDoc = Join-Path $repoRoot 'docs\picocalc-repl-usage.md'
 
 if (-not (Test-Path -LiteralPath $sourceRoot -PathType Container)) {
   $sourceRoot = $submoduleRoot
@@ -26,7 +27,7 @@ $examplesDir = Join-Path $sourceRoot 'examples'
 $testsDir = Join-Path $sourceRoot 'tests'
 $sptoolsDir = Join-Path $sourceRoot 'sptools'
 
-foreach ($path in @($sourceRoot, $examplesDir, $testsDir, $sptoolsDir, $targetRunner, $targetInstaller, $directFbConfig, $picocalcTests)) {
+foreach ($path in @($sourceRoot, $examplesDir, $testsDir, $sptoolsDir, $targetRunner, $targetInstaller, $directFbConfig, $picocalcTests, $replUsageDoc)) {
   if (-not (Test-Path -LiteralPath $path)) {
     throw "Required release input not found: $path"
   }
@@ -64,12 +65,14 @@ try {
   New-Item -ItemType Directory -Force -Path `
     (Join-Path $bundleRoot 'bin'), `
     (Join-Path $bundleRoot 'etc'), `
+    (Join-Path $bundleRoot 'docs'), `
     (Join-Path $bundleRoot 'share') | Out-Null
 
   Copy-Item -LiteralPath $standaloneBinary -Destination (Join-Path $bundleRoot 'bin\mmbasic') -Force
   Copy-Item -LiteralPath $targetRunner -Destination (Join-Path $bundleRoot 'bin\mmb4l-run-tests') -Force
   Copy-Item -LiteralPath $targetInstaller -Destination (Join-Path $bundleRoot 'install-picocalc.sh') -Force
   Copy-Item -LiteralPath $directFbConfig -Destination (Join-Path $bundleRoot 'etc\directfbrc') -Force
+  Copy-Item -LiteralPath $replUsageDoc -Destination (Join-Path $bundleRoot 'docs\picocalc-repl-usage.md') -Force
 
   Copy-DirectoryFresh -Source $examplesDir -Destination (Join-Path $bundleRoot 'share\examples')
   Copy-DirectoryFresh -Source $testsDir -Destination (Join-Path $bundleRoot 'share\tests')
@@ -115,6 +118,9 @@ After installing, run:
 ```sh
 mmb4l-run-tests
 ```
+
+Interactive use and graphics behavior are documented in
+`docs/picocalc-repl-usage.md`.
 '@
   [System.IO.File]::WriteAllText((Join-Path $bundleRoot 'README.md'), $bundleReadme.Replace("`r`n", "`n"))
 

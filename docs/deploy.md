@@ -95,13 +95,14 @@ skip the installer's smoke test.
 To refresh the release bundle from the current build output:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\package-release.ps1
+powershell -ExecutionPolicy Bypass -File .\scripts\package-release.ps1 -UseBuildBinary
 ```
 
-The packager prefers `build/mmb4l-luckfox-release/mmbasic` when present and
-falls back to the tracked `dist/mmbasic-luckfox-lyra-armv7l` binary otherwise.
-It uses `build/mmb4l-luckfox-source` for examples, tests, and `sptools` when
-available, matching the deploy script.
+The packager uses the tracked `dist/mmbasic-luckfox-lyra-armv7l` binary by
+default. Pass `-UseBuildBinary` after a successful local build to refresh that
+tracked binary from `build/mmb4l-luckfox-release/mmbasic`. It uses
+`build/mmb4l-luckfox-source` for examples, tests, and `sptools` when available,
+matching the deploy script.
 
 ## DirectFB Target Setup
 

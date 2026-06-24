@@ -365,6 +365,28 @@ Upstream suitability: target-specific as implemented. A general upstream
 version would need a broader policy for when terminal `PRINT @` output should
 also target an active graphics surface.
 
+### `0018-keep-immediate-cls-on-console.patch`
+
+Purpose: keep bare `CLS` at the interactive MMBasic prompt from unexpectedly
+opening and clearing the PicoCalc graphics surface.
+
+Why it is needed: `0009` intentionally auto-creates the PicoCalc display for
+graphics commands so PicoMite programs can draw without explicit desktop-style
+setup. But when a user types plain `CLS` at the REPL before graphics is active,
+opening a blank `PicoCalc` window or blanking the framebuffer makes it look like
+the prompt has disappeared. The prompt is still in the launching terminal, but
+the behavior is confusing.
+
+What it changes:
+
+- Bare immediate-mode `CLS` clears the console when no graphics surface exists.
+- Program `CLS` still auto-creates and clears the PicoCalc display.
+- Explicit graphics use from the REPL remains available through drawing
+  commands or coloured `CLS`.
+
+Upstream suitability: target-specific. This preserves MMB4L's terminal prompt
+expectations while keeping PicoCalc program compatibility.
+
 ## Patch Rules
 
 - Keep upstream `mmb4l/` as a clean submodule checkout whenever possible.

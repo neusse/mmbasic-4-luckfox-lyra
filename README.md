@@ -172,7 +172,7 @@ target-side `mmb4l-run-tests` script. See [docs/deploy.md](docs/deploy.md).
 Refresh the standalone binary and release bundle after a local build:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\package-release.ps1
+powershell -ExecutionPolicy Bypass -File .\scripts\package-release.ps1 -UseBuildBinary
 ```
 
 ## Patch Model
@@ -192,6 +192,7 @@ repository as the repeatable build/documentation wrapper.
 - [docs/roadmap.md](docs/roadmap.md)
 - [docs/build-mmbasic.md](docs/build-mmbasic.md)
 - [docs/deploy.md](docs/deploy.md)
+- [docs/picocalc-repl-usage.md](docs/picocalc-repl-usage.md)
 - [docs/patches.md](docs/patches.md)
 - [docs/luckfox-networking.md](docs/luckfox-networking.md)
 - [docs/setup/windows-adb.md](docs/setup/windows-adb.md)
