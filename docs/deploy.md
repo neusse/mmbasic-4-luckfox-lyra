@@ -137,18 +137,32 @@ mmb4l-run-tests
 ```
 
 The core set runs the top-level upstream tests patched for the Luckfox Lyra
-PicoCalc environment. Cursor-position checks and DirectFB-backed simulation
-checks are disabled by default because they can corrupt the shell prompt or
-fail for non-root console users. To opt into them explicitly:
+PicoCalc environment. The runner exports
+`MMB4L_TEST_TARGET=picocalc-luckfox-lyra` so display-size tests assert the real
+320x320 PicoCalc framebuffer instead of upstream desktop MMB4L simulation
+sizes.
+
+Cursor-position checks and DirectFB-backed simulation checks are disabled by
+default because they can corrupt the shell prompt or fail for non-root console
+users. The runner prints skip reasons for those intentionally disabled checks.
+To opt into them explicitly:
 
 ```sh
 MMB4L_TEST_CURSOR=1 mmb4l-run-tests tst_mminfo.bas
 MMB4L_TEST_DIRECTFB=1 mmb4l-run-tests tst_mminfo.bas
 ```
 
-The runner exits nonzero if MMBasic exits nonzero or if a test output contains
-a `FAIL (` summary. This is needed because upstream BASIC assertion failures
-can still leave the interpreter process with exit status 0.
+The runner continues through the requested test files, prints `PASS:` or
+`FAIL:` for each file, then exits nonzero if MMBasic exits nonzero or if any
+test output contains a `FAIL (` summary. This is needed because upstream BASIC
+assertion failures can still leave the interpreter process with exit status 0.
+At the end it lists failed files individually, lists skipped `NO ASSERTIONS`
+checks individually, and reports success, failed, skipped, and total counts with
+percentages.
+Known `NO ASSERTIONS` entries in the core suite are platform-gated upstream
+tests: PicoMite-only drive and string escape checks, MMB4L font-address checks,
+cursor checks that require an interactive console, and display simulation checks
+that require a wider simulated display than the 320x320 PicoCalc framebuffer.
 
 The Luckfox image used here is a Buildroot/BusyBox environment, not a full GNU
 desktop distribution. When a test only needs a simple tool behavior, this

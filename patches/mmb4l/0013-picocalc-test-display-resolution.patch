@@ -1,0 +1,42 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: George <george@example.com>
+Date: Tue, 23 Jun 2026 18:30:00 -0700
+Subject: [PATCH] Test PicoCalc framebuffer HRES on Luckfox
+
+The Luckfox PicoCalc target uses the real 320x320 DirectFB framebuffer for
+graphics, so MM.HRES intentionally reports 320. The upstream MMB4L test
+expects desktop terminal character dimensions to scale into a large pixel
+surface, which is not the target behavior.
+
+Use the MMB4L_TEST_TARGET profile exported by the target test runner to assert
+the PicoCalc framebuffer size directly while preserving the upstream desktop
+expectation for other MMB4L runs.
+---
+ tests/tst_mminfo.bas | 11 +++++++++++
+ 1 file changed, 11 insertions(+)
+
+diff --git a/tests/tst_mminfo.bas b/tests/tst_mminfo.bas
+index cde88ab..58d15e1 100644
+--- a/tests/tst_mminfo.bas
++++ b/tests/tst_mminfo.bas
+@@ -621,6 +621,17 @@ Sub test_hpos()
+ End Sub
+ 
+ Sub test_hres()
+   If sys.is_platform%("mmb4l") Then
++    If Mm.Info$(EnvVar "MMB4L_TEST_TARGET") = "picocalc-luckfox-lyra" Then
++      Option Resolution Character
++      assert_int_equals(320, Mm.Info(HRes))
++      assert_int_equals(320, Mm.HRes)
++
++      Option Resolution Pixel
++      assert_int_equals(320, Mm.Info(HRes))
++      assert_int_equals(320, Mm.HRes)
++      Exit Sub
++    EndIf
++
+     Option Resolution Character
+     Local actual% = Mm.Info(HRes)
+     Local out$
+-- 
+2.45.0

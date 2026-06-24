@@ -266,6 +266,44 @@ Current limitations:
 Upstream suitability: low as-is. The policy is correct for Luckfox, but the
 implementation depends on Linux wireless tooling and should stay target-gated.
 
+### `0013-picocalc-test-display-resolution.patch`
+
+Purpose: make upstream `tst_mminfo.bas` validate the real PicoCalc horizontal
+display size.
+
+Why it is needed: the Luckfox PicoCalc target uses the real 320x320 DirectFB
+framebuffer. Upstream desktop MMB4L expects terminal character dimensions to
+scale into a larger simulated pixel surface, so the unmodified `MM.HRES`
+assertions fail even though the PicoCalc behavior is correct.
+
+What it changes:
+
+- Uses `MMB4L_TEST_TARGET=picocalc-luckfox-lyra` from the target runner.
+- Asserts `MM.HRES` and `MM.INFO(HRES)` are 320 in both character and pixel
+  resolution modes for the PicoCalc target profile.
+- Leaves upstream desktop MMB4L expectations unchanged when the target profile
+  is not set.
+
+Upstream suitability: low as-is. The assertion is specific to the Luckfox Lyra
+PicoCalc build and should remain target-gated.
+
+### `0014-fix-picocalc-mminfo-vres-test.patch`
+
+Purpose: finish the PicoCalc-specific `tst_mminfo.bas` expectations.
+
+Why it is needed: adding target-specific `HRES` assertions changed the
+`MM.INFO$(LINE)` line number expected by the same test file. The target also
+needs the matching `VRES` assertion for the real 320-pixel framebuffer.
+
+What it changes:
+
+- Updates the MMB4L `MM.INFO$(LINE)` expectation to match the patched source.
+- Asserts `MM.VRES` and `MM.INFO(VRES)` are 320 for
+  `MMB4L_TEST_TARGET=picocalc-luckfox-lyra`.
+
+Upstream suitability: low as-is. This follows the target-gated test profile
+used by the Luckfox PicoCalc runner.
+
 ## Patch Rules
 
 - Keep upstream `mmb4l/` as a clean submodule checkout whenever possible.

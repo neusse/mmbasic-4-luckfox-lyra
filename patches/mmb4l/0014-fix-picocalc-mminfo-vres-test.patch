@@ -1,0 +1,46 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: George <george@example.com>
+Date: Tue, 23 Jun 2026 19:05:00 -0700
+Subject: [PATCH] Fix PicoCalc MM.INFO line and VRES tests
+
+The PicoCalc target-specific HRES assertions added lines before
+`test_line()`, so the expected `MM.INFO$(LINE)` value must move with the test
+body. Also assert the real 320-pixel VRES on the Luckfox PicoCalc target
+profile, matching the HRES behavior.
+---
+ tests/tst_mminfo.bas | 13 ++++++++++++-
+ 1 file changed, 12 insertions(+), 1 deletion(-)
+
+diff --git a/tests/tst_mminfo.bas b/tests/tst_mminfo.bas
+index 26ea368..b741f6b 100644
+--- a/tests/tst_mminfo.bas
++++ b/tests/tst_mminfo.bas
+@@ -650,7 +650,7 @@ End Sub
+ Sub test_line()
+   Const line$ = Mm.Info$(Line)
+   If sys.is_platform%("mmb4l") Then
+-    assert_int_equals(640, Val(Field$(line$, 1, ",")))
++    assert_int_equals(651, Val(Field$(line$, 1, ",")))
+     assert_string_equals(Mm.Info$(Current), Field$(line$, 2, ","))
+   Else
+     ' Line number refers to the transpiled file.
+@@ -1111,6 +1111,17 @@ End Sub
+ 
+ Sub test_vres()
+   If sys.is_platform%("mmb4l") Then
++    If Mm.Info$(EnvVar "MMB4L_TEST_TARGET") = "picocalc-luckfox-lyra" Then
++      Option Resolution Character
++      assert_int_equals(320, Mm.Info(VRes))
++      assert_int_equals(320, Mm.VRes)
++
++      Option Resolution Pixel
++      assert_int_equals(320, Mm.Info(VRes))
++      assert_int_equals(320, Mm.VRes)
++      Exit Sub
++    EndIf
++
+     Option Resolution Character
+     Local actual% = Mm.Info(VRes)
+     Local out$
+-- 
+2.45.0
