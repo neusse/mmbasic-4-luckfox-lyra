@@ -9,7 +9,9 @@ usage() {
   cat <<'USAGE'
 Usage:
   mmb4l-run-tests --smoke
-  mmb4l-run-tests --upstream-all [-- mmbasic test args]
+  mmb4l-run-tests [--all] [-- mmbasic test args]
+  mmb4l-run-tests --core [-- mmbasic test args]
+  mmb4l-run-tests --upstream-entrypoint [-- mmbasic test args]
   mmb4l-run-tests [run_tests.bas | tst_math.bas ...] [-- mmbasic test args]
 
 Environment:
@@ -19,9 +21,10 @@ Environment:
   MMB4L_TEST_TARGET Target profile for patched upstream tests.
                     Default: picocalc-luckfox-lyra
 
-With no test files, this runs the PicoCalc core test set. Use --upstream-all
-to run the upstream tests/run_tests.bas entry point. The upstream-all path is
-broader and slower than the PicoCalc core set.
+With no test files, this runs all installed target tests: upstream tst*.bas
+files plus project PicoCalc tst*.bas files. Use --core for the smaller legacy
+core subset, or --upstream-entrypoint to run the upstream tests/run_tests.bas
+entry point directly.
 USAGE
 }
 
@@ -105,9 +108,21 @@ else
 fi
 
 test_args=
-if [ "${1:-}" = "--upstream-all" ]; then
+mode=all
+if [ "${1:-}" = "--all" ]; then
   shift
-  tests=run_tests.bas
+  mode=all
+  if [ "${1:-}" = "--" ]; then
+    shift
+    test_args=$*
+  elif [ "$#" -gt 0 ]; then
+    echo "--all only accepts extra test arguments after --" >&2
+    exit 2
+  fi
+elif [ "${1:-}" = "--upstream-all" ]; then
+  echo "Notice: --upstream-all is deprecated; running the full installed target suite. Use --upstream-entrypoint for upstream run_tests.bas only."
+  shift
+  mode=all
   if [ "${1:-}" = "--" ]; then
     shift
     test_args=$*
@@ -115,7 +130,29 @@ if [ "${1:-}" = "--upstream-all" ]; then
     echo "--upstream-all only accepts extra test arguments after --" >&2
     exit 2
   fi
+elif [ "${1:-}" = "--core" ]; then
+  shift
+  mode=core
+  if [ "${1:-}" = "--" ]; then
+    shift
+    test_args=$*
+  elif [ "$#" -gt 0 ]; then
+    echo "--core only accepts extra test arguments after --" >&2
+    exit 2
+  fi
+elif [ "${1:-}" = "--upstream-entrypoint" ]; then
+  shift
+  mode=upstream_entrypoint
+  tests=run_tests.bas
+  if [ "${1:-}" = "--" ]; then
+    shift
+    test_args=$*
+  elif [ "$#" -gt 0 ]; then
+    echo "--upstream-entrypoint only accepts extra test arguments after --" >&2
+    exit 2
+  fi
 elif [ "$#" -gt 0 ]; then
+  mode=explicit
   tests=
   while [ "$#" -gt 0 ]; do
     if [ "$1" = "--" ]; then
@@ -128,7 +165,14 @@ elif [ "$#" -gt 0 ]; then
     shift
   done
 else
+  mode=all
+fi
+
+if [ "$mode" = "core" ]; then
   tests=$PICOCALC_CORE_TESTS
+elif [ "$mode" = "all" ]; then
+  cd "$TEST_DIR"
+  tests=$(find . -type f -name 'tst*.bas' | sed 's#^\./##' | sort)
 fi
 
 case "
@@ -176,10 +220,10 @@ esac
 
 cd "$TEST_DIR"
 
-run_count=0
-fail_count=0
 pass_count=0
+fail_count=0
 skip_count=0
+run_count=0
 failed_list=
 skipped_list=
 
@@ -194,6 +238,95 @@ print_summary_line() {
   fi
   echo "$label: $count/$total (${percent}%)"
 }
+
+add_pass() {
+  pass_count=$((pass_count + 1))
+}
+
+add_fail() {
+  subject=$1
+  reason=$2
+  fail_count=$((fail_count + 1))
+  failed_list="${failed_list}${failed_list:+
+}  FAIL: $subject - $reason"
+}
+
+add_skip() {
+  subject=$1
+  reason=$2
+  entry="  SKIP: $subject - $reason"
+  case "
+$skipped_list
+" in
+*"
+$entry
+"*)
+    return
+    ;;
+  esac
+  skip_count=$((skip_count + 1))
+  skipped_list="${skipped_list}${skipped_list:+
+}$entry"
+}
+
+check_directfbrc() {
+  name='system:/etc/directfbrc'
+  if [ ! -f /etc/directfbrc ]; then
+    echo "FAIL: $name missing"
+    add_fail "$name" "missing"
+    return
+  fi
+
+  missing=
+  for option in quiet no-banner no-debug no-vt no-vt-switch no-linux-input-grab 'disable-module=keyboard' 'disable-module=linux_input'; do
+    if ! grep -qx "$option" /etc/directfbrc; then
+      missing="${missing}${missing:+, }$option"
+    fi
+  done
+
+  if [ -n "$missing" ]; then
+    echo "FAIL: $name missing required option(s): $missing"
+    add_fail "$name" "missing required option(s): $missing"
+  else
+    echo "PASS: $name"
+    add_pass
+  fi
+}
+
+check_device_access() {
+  device=$1
+  name="system:$device"
+  if [ ! -e "$device" ]; then
+    echo "FAIL: $name missing"
+    add_fail "$name" "missing"
+  elif [ ! -r "$device" ] || [ ! -w "$device" ]; then
+    echo "FAIL: $name is not readable and writable by this user"
+    add_fail "$name" "not readable and writable by this user"
+  else
+    echo "PASS: $name"
+    add_pass
+  fi
+}
+
+check_installed_picocalc_tests() {
+  name='system:picocalc-tests-installed'
+  count=$(find picocalc -type f -name 'tst*.bas' 2>/dev/null | wc -l)
+  if [ "$count" -gt 0 ]; then
+    echo "PASS: $name ($count)"
+    add_pass
+  else
+    echo "FAIL: $name none found under $TEST_DIR/picocalc"
+    add_fail "$name" "none found under $TEST_DIR/picocalc"
+  fi
+}
+
+if [ "$mode" = "all" ]; then
+  echo "Running target health checks"
+  check_directfbrc
+  check_device_access /dev/fb0
+  check_device_access /dev/tty0
+  check_installed_picocalc_tests
+fi
 
 for test_file in $tests; do
   [ -n "$test_file" ] || continue
@@ -222,17 +355,13 @@ for test_file in $tests; do
   rm -f "$output_pipe"
   if [ "$status" -ne 0 ]; then
     echo "FAIL: $test_file exited with status $status"
-    fail_count=$((fail_count + 1))
-    failed_list="${failed_list}${failed_list:+
-}  FAIL: $test_file - exited with status $status"
+    add_fail "$test_file" "exited with status $status"
     rm -f "$output_file"
     continue
   fi
   if grep -q "FAIL (" "$output_file"; then
     echo "FAIL: $test_file reported BASIC assertion failures"
-    fail_count=$((fail_count + 1))
-    failed_list="${failed_list}${failed_list:+
-}  FAIL: $test_file - reported BASIC assertion failures"
+    add_fail "$test_file" "reported BASIC assertion failures"
     rm -f "$output_file"
     continue
   fi
@@ -247,14 +376,12 @@ for test_file in $tests; do
         continue
         ;;
       esac
-      skip_count=$((skip_count + 1))
-      skipped_list="${skipped_list}${skipped_list:+
-}  SKIP: $test_file - $skipped_name"
+      add_skip "$test_file" "$skipped_name"
     done <"$skipped_file"
     rm -f "$skipped_file"
   fi
   rm -f "$output_file"
-  pass_count=$((pass_count + 1))
+  add_pass
   echo "PASS: $test_file"
 done
 
