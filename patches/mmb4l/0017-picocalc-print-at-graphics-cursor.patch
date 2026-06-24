@@ -1,0 +1,159 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Codex <codex@example.com>
+Date: Tue, 23 Jun 2026 00:00:00 -0700
+Subject: [PATCH] Draw PRINT AT output on PicoCalc framebuffer
+
+PicoMite programs commonly use PRINT @(x,y) for positioned screen text.
+MMB4L's AT() function only emitted a VT100 cursor escape, so on the
+Luckfox/PicoCalc target the text went to the SSH/ADB terminal while BOX,
+RBOX, and TEXT drew correctly on the framebuffer.
+
+When the default display probe identifies the PicoCalc framebuffer, arm a
+small graphics text cursor from AT() and mirror subsequent console output
+through the normal graphics font renderer until a line break ends the
+positioned print. Keep the existing VT100 cursor behavior on non-PicoCalc
+targets.
+---
+ src/common/console.c   |  2 ++
+ src/common/graphics.c  | 59 ++++++++++++++++++++++++++++++++++++++++++
+ src/common/graphics.h  |  6 +++++
+ src/functions/fun_at.c |  5 +++-
+ 4 files changed, 71 insertions(+), 1 deletion(-)
+
+diff --git a/src/common/console.c b/src/common/console.c
+index cfe353a..8a197a3 100644
+--- a/src/common/console.c
++++ b/src/common/console.c
+@@ -55,6 +55,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ #include "console.h"
+ #include "error.h"
+ #include "interrupt.h"
++#include "graphics.h"
+ #include "mmtime.h"
+ #include "utility.h"
+ #include "rx_buf.h"
+@@ -300,6 +301,7 @@ static char console_putc_noflush(char c) {
+             }
+         }
+     }
++    (void) graphics_console_putc(c);
+     return c;
+ }
+ 
+diff --git a/src/common/graphics.c b/src/common/graphics.c
+index 276aab8..63abaa8 100644
+--- a/src/common/graphics.c
++++ b/src/common/graphics.c
+@@ -172,6 +172,10 @@ unsigned graphics_mode = 0;
+ static uint64_t frameEnd = 0;
+ static bool graphics_default_display_probe_done = false;
+ static bool graphics_default_display_is_picocalc = false;
++static bool graphics_console_cursor_active = false;
++static int graphics_console_cursor_x = 0;
++static int graphics_console_cursor_y = 0;
++static int graphics_console_cursor_start_x = 0;
+ 
+ #define PICOCALC_DISPLAY_WIDTH  320
+ #define PICOCALC_DISPLAY_HEIGHT 320
+@@ -237,6 +241,61 @@ MmResult graphics_ensure_default_display() {
+     return result;
+ }
+ 
++bool graphics_console_set_cursor(int x, int y) {
++    if (!graphics_is_default_display_picocalc()) return false;
++    if (FAILED(graphics_ensure_default_display())) return false;
++
++    graphics_console_cursor_active = true;
++    graphics_console_cursor_x = x;
++    graphics_console_cursor_y = y;
++    graphics_console_cursor_start_x = x;
++    return true;
++}
++
++bool graphics_console_putc(char c) {
++    if (!graphics_console_cursor_active) return false;
++
++    if (!graphics_current) {
++        graphics_console_cursor_active = false;
++        return false;
++    }
++
++    if (c == '\r' || c == '\n') {
++        graphics_console_cursor_active = false;
++        return true;
++    }
++
++    if (c == '\b') {
++        int x = graphics_console_cursor_x;
++        int y = graphics_console_cursor_y;
++        int w = (int) font_width(graphics_font);
++        if (graphics_console_cursor_x - w >= graphics_console_cursor_start_x) {
++            graphics_console_cursor_x -= w;
++            x = graphics_console_cursor_x;
++        }
++        MmResult result = graphics_draw_char(graphics_current, &x, &y, graphics_font,
++                                            graphics_fcolour, graphics_bcolour, ' ',
++                                            kOrientNormal);
++        if (FAILED(result)) graphics_console_cursor_active = false;
++        else graphics_refresh_windows();
++        return SUCCEEDED(result);
++    }
++
++    if (c == '\t') {
++        for (int i = 0; i < 4; ++i) if (!graphics_console_putc(' ')) return false;
++        return true;
++    }
++
++    if ((unsigned char) c < 0x20 || (unsigned char) c == 0x7F) return true;
++    MmResult result = graphics_draw_char(graphics_current, &graphics_console_cursor_x,
++                                        &graphics_console_cursor_y, graphics_font,
++                                        graphics_fcolour, graphics_bcolour, c,
++                                        kOrientNormal);
++    if (FAILED(result)) graphics_console_cursor_active = false;
++    else graphics_refresh_windows();
++    return SUCCEEDED(result);
++}
++
+ MmResult graphics_init() {
+     if (graphics_initialised) return kOk;
+     MmResult result = events_init();
+diff --git a/src/common/graphics.h b/src/common/graphics.h
+index a3f83fc..06b421b 100644
+--- a/src/common/graphics.h
++++ b/src/common/graphics.h
+@@ -216,6 +216,12 @@ MmResult graphics_ensure_default_display();
+ /** Returns true when the default display probe has identified the Luckfox PicoCalc framebuffer. */
+ bool graphics_is_default_display_picocalc();
+ 
++/** Sets the PicoCalc graphics cursor used by PRINT @(x,y). */
++bool graphics_console_set_cursor(int x, int y);
++
++/** Draws console output at the active PicoCalc graphics cursor when armed. */
++bool graphics_console_putc(char c);
++
+ /** Terminates 'graphics' module, closes all windows, frees all resources. */
+ MmResult graphics_term();
+ 
+diff --git a/src/functions/fun_at.c b/src/functions/fun_at.c
+index a41121d..fd3be67 100644
+--- a/src/functions/fun_at.c
++++ b/src/functions/fun_at.c
+@@ -44,6 +44,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ 
+ #include "../common/mmb4l.h"
+ #include "../common/console.h"
++#include "../common/graphics.h"
+ #include "../common/error.h"
+ #include "../core/commandtbl.h"
+ 
+@@ -59,7 +60,9 @@ void fun_at(void) {
+     if (x < 0) ERROR_INVALID("x-coordinate");
+     if (y < 0) ERROR_INVALID("y-coordinate");
+ 
+-    console_set_cursor_pos((int) x, (int) y);
++    if (!graphics_console_set_cursor((int) x, (int) y)) {
++        console_set_cursor_pos((int) x, (int) y);
++    }
+ 
+     targ = T_STR;
+     sret = GetTempStrMemory();

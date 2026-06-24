@@ -12,6 +12,7 @@ The deploy script installs:
 - PATH-visible links under `/usr/bin`
 - upstream examples to `/usr/local/share/mmb4l/examples`
 - upstream tests to `/usr/local/share/mmb4l/tests`
+- PicoCalc target tests to `/usr/local/share/mmb4l/tests/picocalc`
 - upstream `sptools` to `/usr/local/share/mmb4l/sptools`
 
 The `tests` and `sptools` directories are installed as siblings because the
@@ -54,6 +55,53 @@ The upstream `sptools` scripts use `/usr/local/bin/mmbasic` in shebangs, so the
 default keeps the real binary under `/usr/local/bin`. The Luckfox image used for
 this project has `/usr/bin` in `PATH`, so the deploy script also creates
 `/usr/bin/mmbasic` and `/usr/bin/mmb4l-run-tests` links by default.
+
+## No-Build Release Bundle
+
+For users who only want to install the current tested build, use:
+
+```text
+dist/mmbasic-luckfox-lyra-release.tar.gz
+```
+
+Copy the archive to the PicoCalc, then run:
+
+```sh
+tar xzf mmbasic-luckfox-lyra-release.tar.gz
+cd mmbasic-luckfox-lyra-release
+sh install-picocalc.sh
+mmb4l-run-tests
+```
+
+The bundle installs the same target layout as `scripts/deploy-mmbasic.ps1`:
+
+- `mmbasic` to `/usr/local/bin/mmbasic`
+- `mmb4l-run-tests` to `/usr/local/bin/mmb4l-run-tests`
+- PATH-visible links under `/usr/bin`
+- examples, tests, PicoCalc tests, and `sptools` under
+  `/usr/local/share/mmb4l`
+- `directfbrc` to `/etc/directfbrc`
+
+By default, `install-picocalc.sh` also applies the current device-permission
+workaround:
+
+```sh
+chmod 666 /dev/fb0 /dev/tty0
+```
+
+Set `MMB4L_APPLY_DEVICE_PERMS=0` to skip that step. Set `MMB4L_RUN_SMOKE=0` to
+skip the installer's smoke test.
+
+To refresh the release bundle from the current build output:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\package-release.ps1
+```
+
+The packager prefers `build/mmb4l-luckfox-release/mmbasic` when present and
+falls back to the tracked `dist/mmbasic-luckfox-lyra-armv7l` binary otherwise.
+It uses `build/mmb4l-luckfox-source` for examples, tests, and `sptools` when
+available, matching the deploy script.
 
 ## DirectFB Target Setup
 
@@ -130,17 +178,34 @@ Fast install check:
 mmb4l-run-tests --smoke
 ```
 
-Run the PicoCalc core test set:
+Run the full target health suite:
 
 ```sh
 mmb4l-run-tests
 ```
 
-The core set runs the top-level upstream tests patched for the Luckfox Lyra
-PicoCalc environment. The runner exports
-`MMB4L_TEST_TARGET=picocalc-luckfox-lyra` so display-size tests assert the real
-320x320 PicoCalc framebuffer instead of upstream desktop MMB4L simulation
-sizes.
+With no arguments, the runner discovers and runs every installed `tst*.bas`
+under `/usr/local/share/mmb4l/tests`, including the upstream test files and the
+project PicoCalc tests under `tests/picocalc`. It also runs target health
+checks for:
+
+- required `/etc/directfbrc` options
+- read/write access to `/dev/fb0`
+- read/write access to `/dev/tty0`
+- installed PicoCalc target tests
+
+The runner exports `MMB4L_TEST_TARGET=picocalc-luckfox-lyra` so display-size
+tests assert the real 320x320 PicoCalc framebuffer instead of upstream desktop
+MMB4L simulation sizes.
+
+Each BASIC test file is also wrapped with a timeout so a hardware or networking
+operation cannot hang the entire health report. The default is 60 seconds per
+file:
+
+```sh
+MMB4L_TEST_TIMEOUT=120 mmb4l-run-tests
+MMB4L_TEST_TIMEOUT=0 mmb4l-run-tests
+```
 
 Cursor-position checks and DirectFB-backed simulation checks are disabled by
 default because they can corrupt the shell prompt or fail for non-root console
@@ -159,7 +224,7 @@ assertion failures can still leave the interpreter process with exit status 0.
 At the end it lists failed files individually, lists skipped `NO ASSERTIONS`
 checks individually, and reports success, failed, skipped, and total counts with
 percentages.
-Known `NO ASSERTIONS` entries in the core suite are platform-gated upstream
+Known `NO ASSERTIONS` entries in the default suite are platform-gated upstream
 tests: PicoMite-only drive and string escape checks, MMB4L font-address checks,
 cursor checks that require an interactive console, and display simulation checks
 that require a wider simulated display than the 320x320 PicoCalc framebuffer.
@@ -170,15 +235,24 @@ project patches the test or runtime expectation instead of requiring full GNU
 coreutils. If a future MMB4L feature genuinely needs a GNU-only behavior, add
 that as an explicit SDK/runtime dependency and document it here.
 
+Run the smaller legacy core subset:
+
+```sh
+mmb4l-run-tests --core
+```
+
+This runs only the curated top-level upstream files that were used before the
+full health suite became the default.
+
 Run the exact upstream test entry point:
 
 ```sh
-mmb4l-run-tests --upstream-all
+mmb4l-run-tests --upstream-entrypoint
 ```
 
-This is broader and slower than the PicoCalc core set because it uses upstream
-`tests/run_tests.bas` discovery. The runner streams output live so it does not
-look frozen during long runs.
+This uses upstream `tests/run_tests.bas` discovery directly. The older
+`--upstream-all` flag is kept as a deprecated alias for the default full health
+suite because it did not include the project PicoCalc tests.
 
 Run individual upstream tests:
 
@@ -189,7 +263,7 @@ mmb4l-run-tests tst_math.bas tst_strings.bas
 Pass arguments to the upstream test framework after `--`:
 
 ```sh
-mmb4l-run-tests --upstream-all -- --verbose
+mmb4l-run-tests --upstream-entrypoint -- --verbose
 ```
 
 Some upstream tests exercise graphics, audio, gamepad, keyboard, or manual

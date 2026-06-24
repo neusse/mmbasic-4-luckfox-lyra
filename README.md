@@ -133,6 +133,27 @@ A compiled ARMv7 Luckfox/PicoCalc binary is included at
 `dist/mmbasic-luckfox-lyra-armv7l`. Its checksum is recorded in
 `dist/SHA256SUMS`.
 
+For users who do not want to build from source, use the install-ready release
+bundle:
+
+```text
+dist/mmbasic-luckfox-lyra-release.tar.gz
+```
+
+Copy it to the PicoCalc, unpack it, and install:
+
+```sh
+tar xzf mmbasic-luckfox-lyra-release.tar.gz
+cd mmbasic-luckfox-lyra-release
+sh install-picocalc.sh
+mmb4l-run-tests
+```
+
+The bundle includes `mmbasic`, `mmb4l-run-tests`, examples, upstream tests,
+PicoCalc target tests, `sptools`, and the proven `/etc/directfbrc`
+configuration. It also applies the current `/dev/fb0` and `/dev/tty0`
+permission workaround unless `MMB4L_APPLY_DEVICE_PERMS=0` is set.
+
 Smoke test on the connected PicoCalc:
 
 ```powershell
@@ -147,6 +168,12 @@ powershell -ExecutionPolicy Bypass -File .\scripts\deploy-mmbasic.ps1
 
 This installs `mmbasic`, upstream examples, upstream tests, `sptools`, and a
 target-side `mmb4l-run-tests` script. See [docs/deploy.md](docs/deploy.md).
+
+Refresh the standalone binary and release bundle after a local build:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\package-release.ps1
+```
 
 ## Patch Model
 

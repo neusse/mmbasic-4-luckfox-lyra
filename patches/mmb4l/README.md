@@ -304,6 +304,67 @@ What it changes:
 Upstream suitability: low as-is. This follows the target-gated test profile
 used by the Luckfox PicoCalc runner.
 
+### `0015-accept-picomite-negative-line-width.patch`
+
+Purpose: support PicoMite-compatible negative `LINE` widths.
+
+Why it is needed: PicoMite documents `LINE x1, y1, x2, y2 [,[-] LW [, C]]`;
+negative `LW` centers the thickness on the line endpoints and applies to lines
+in all directions. MMB4L rejected scalar negative widths and ignored width for
+diagonal lines, which breaks PicoMite graphics programs such as clock faces
+that use `LINE ..., -2, colour`.
+
+What it changes:
+
+- Allows scalar and array `LINE` widths from `-100` to `100`.
+- Treats `0` as a no-op.
+- Renders negative widths as centered parallel 1-pixel lines, including
+  diagonal lines.
+
+Upstream suitability: good candidate. This is documented PicoMite syntax and
+keeps existing positive-width behavior unchanged.
+
+### `0016-add-picomite-array-set-command.patch`
+
+Purpose: support PicoMite/WebMite `ARRAY SET value,array()`.
+
+Why it is needed: PicoMite programs use `ARRAY SET` to initialise numeric and
+string arrays. MMB4L had no `ARRAY` command entry, so those programs failed with
+`Unknown command` before reaching any array handling.
+
+What it changes:
+
+- Registers the `Array` command.
+- Adds `ARRAY SET` for whole integer, floating-point, and string arrays.
+- Fills every declared element across all dimensions while preserving MMBasic
+  string-length checks.
+
+Upstream suitability: good candidate. This adds documented PicoMite language
+syntax without changing existing MMB4L command behaviour.
+
+### `0017-picocalc-print-at-graphics-cursor.patch`
+
+Purpose: make `PRINT @(x,y)` draw positioned text on the PicoCalc framebuffer.
+
+Why it is needed: PicoMite programs often mix `BOX`, `RBOX`, `TEXT`, and
+`PRINT @` for screen layouts. The graphics commands already draw to the
+PicoCalc DirectFB surface, but MMB4L's `AT()` function only emitted VT100
+cursor escapes, so positioned `PRINT` text went to the SSH/ADB terminal instead
+of the PicoCalc screen.
+
+What it changes:
+
+- Arms a PicoCalc graphics text cursor from `PRINT @(x,y)` when the default
+  display probe identifies the Luckfox PicoCalc framebuffer.
+- Mirrors subsequent console characters into the active graphics surface using
+  the current graphics font and colours until a line break ends the positioned
+  print.
+- Keeps the old VT100 terminal cursor behavior for non-PicoCalc targets.
+
+Upstream suitability: target-specific as implemented. A general upstream
+version would need a broader policy for when terminal `PRINT @` output should
+also target an active graphics surface.
+
 ## Patch Rules
 
 - Keep upstream `mmb4l/` as a clean submodule checkout whenever possible.

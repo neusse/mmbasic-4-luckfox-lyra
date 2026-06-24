@@ -1,0 +1,74 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: George <george@example.com>
+Date: Tue, 23 Jun 2026 22:30:00 -0700
+Subject: [PATCH] Accept PicoMite negative LINE widths
+
+PicoMite documents `LINE x1, y1, x2, y2 [,[-] LW [, C]]`, where a negative
+line width centers the thickness on the supplied coordinates and applies to
+lines in all directions. MMB4L rejected scalar negative widths before drawing,
+and diagonal lines ignored width entirely.
+
+Allow signed widths in the LINE parser and render negative widths by drawing a
+centered set of parallel 1-pixel lines. Positive-width behavior is unchanged.
+---
+ src/commands/cmd_line.c |  6 +++---
+ src/common/graphics.c   | 21 +++++++++++++++++++++
+ 2 files changed, 24 insertions(+), 3 deletions(-)
+
+diff --git a/src/commands/cmd_line.c b/src/commands/cmd_line.c
+index 7e44a89..d4fb2bd 100644
+--- a/src/commands/cmd_line.c
++++ b/src/commands/cmd_line.c
+@@ -204,7 +204,7 @@ static MmResult cmd_line_default(const char *p) {
+         int y1 = getinteger(argv[2]);
+         int x2 = getinteger(argv[4]);
+         int y2 = getinteger(argv[6]);
+-        int w = (argc > 7 && *argv[8]) ? getint(argv[8], 1, 100) : 1;
++        int w = (argc > 7 && *argv[8]) ? getint(argv[8], -100, 100) : 1;
+         MmGraphicsColour colour = (argc == 11) ? getint(argv[10], RGB_BLACK, RGB_WHITE) : graphics_fcolour;
+         return graphics_draw_line(graphics_current, x1, y1, x2, y2, w, colour);
+     } else {
+@@ -216,12 +216,12 @@ static MmResult cmd_line_default(const char *p) {
+         if (argc > 7 && *argv[8]) {
+             getargaddress(argv[8], &wptr, &wfptr, &nw);
+             if (nw == 1) {
+-                w = getint(argv[8], 0, 100);
++                w = getint(argv[8], -100, 100);
+             } else if (nw > 1) {
+                 if (nw > 1 && nw < n) n = nw;  // adjust the dimensionality
+                 for (int i = 0; i < nw; i++) {
+                     w = (wfptr == NULL ? wptr[i] : (int)wfptr[i]);
+-                    if (w < 0 || w > 100) ERROR_INVALID_INTEGER_RANGE(w, 0, 100);
++                    if (w < -100 || w > 100) ERROR_INVALID_INTEGER_RANGE(w, -100, 100);
+                 }
+             }
+         }
+diff --git a/src/common/graphics.c b/src/common/graphics.c
+index 338a242..89b6d55 100644
+--- a/src/common/graphics.c
++++ b/src/common/graphics.c
+@@ -1149,4 +1149,24 @@ MmResult graphics_draw_line(MmSurface *surface, int x1, int y1, int x2, int y2,
+                             MmGraphicsColour colour) {
++    if (width == 0) return kOk;
++    if (width < 0) {
++        int centered_width = -width;
++        int before = (centered_width - 1) / 2;
++        int after = centered_width / 2;
++        int dx = abs(x2 - x1);
++        int dy = abs(y2 - y1);
++        MmResult result = kOk;
++        if (dx >= dy) {
++            for (int offset = -before; SUCCEEDED(result) && offset <= after; offset++) {
++                result = graphics_draw_line(surface, x1, y1 + offset, x2, y2 + offset, 1, colour);
++            }
++        } else {
++            for (int offset = -before; SUCCEEDED(result) && offset <= after; offset++) {
++                result = graphics_draw_line(surface, x1 + offset, y1, x2 + offset, y2, 1, colour);
++            }
++        }
++        return result;
++    }
++
+     if (y1 == y2) {
+         return graphics_draw_rectangle(surface, x1, y1, x2, y2 + width - 1, colour);  // horiz line
+     }

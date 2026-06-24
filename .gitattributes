@@ -4,5 +4,8 @@
 *.ps1 text eol=crlf
 *.md text eol=lf
 *.patch text eol=lf
+*.bas text eol=lf
 scripts/target/directfbrc text eol=lf
 dist/mmbasic-luckfox-lyra-armv7l binary
+dist/SHA256SUMS text eol=lf
+dist/*.tar.gz binary

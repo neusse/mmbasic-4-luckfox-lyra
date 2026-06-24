@@ -16,10 +16,11 @@ $sourceRoot = if (Test-Path -LiteralPath $patchedSourceDir) { $patchedSourceDir 
 $examplesDir = Join-Path $sourceRoot 'examples'
 $testsDir = Join-Path $sourceRoot 'tests'
 $sptoolsDir = Join-Path $sourceRoot 'sptools'
+$picocalcTestsDir = Join-Path $repoRoot 'tests\picocalc'
 $targetRunner = Join-Path $repoRoot 'scripts\target\mmb4l-run-tests.sh'
 $directFbConfig = Join-Path $repoRoot 'scripts\target\directfbrc'
 
-foreach ($path in @($binary, $examplesDir, $testsDir, $sptoolsDir, $targetRunner, $directFbConfig)) {
+foreach ($path in @($binary, $examplesDir, $testsDir, $sptoolsDir, $picocalcTestsDir, $targetRunner, $directFbConfig)) {
   if (-not (Test-Path -LiteralPath $path)) {
     throw "Required path not found: $path"
   }
@@ -54,6 +55,7 @@ test -f "`$stage/mmbasic"
 test -f "`$stage/directfbrc"
 test -d "`$stage/share/examples"
 test -d "`$stage/share/tests"
+test -d "`$stage/share/picocalc-tests"
 test -d "`$stage/share/sptools"
 test -f "`$stage/mmb4l-run-tests.sh"
 
@@ -63,6 +65,8 @@ rm -rf "`$share_dir/examples" "`$share_dir/tests" "`$share_dir/sptools"
 cp "`$stage/mmbasic" "`$bin_dir/mmbasic"
 cp -R "`$stage/share/examples" "`$share_dir/examples"
 cp -R "`$stage/share/tests" "`$share_dir/tests"
+mkdir -p "`$share_dir/tests/picocalc"
+cp "`$stage/share/picocalc-tests"/*.bas "`$share_dir/tests/picocalc/"
 cp -R "`$stage/share/sptools" "`$share_dir/sptools"
 cp "`$stage/mmb4l-run-tests.sh" "`$bin_dir/mmb4l-run-tests"
 if [ -n "`$directfb_config_path" ]; then
@@ -92,6 +96,7 @@ try {
   Invoke-Adb push $tempInstall "$RemoteStage/install.sh"
   Invoke-Adb push $examplesDir "$RemoteStage/share/"
   Invoke-Adb push $testsDir "$RemoteStage/share/"
+  Invoke-Adb push $picocalcTestsDir "$RemoteStage/share/picocalc-tests"
   Invoke-Adb push $sptoolsDir "$RemoteStage/share/"
   Invoke-Adb shell "sh '$RemoteStage/install.sh'"
 
@@ -104,6 +109,7 @@ try {
     Write-Output "Linked mmbasic into $PathBinDir for shell PATH discovery"
   }
   Write-Output "Deployed BASIC examples/tests from $sourceRoot"
+  Write-Output "Deployed PicoCalc target tests from $picocalcTestsDir"
   Write-Output "Installed examples/tests/sptools to $InstallShareDir"
   Write-Output "Installed test runner to $InstallBinDir/mmb4l-run-tests"
   if ($DirectFbConfigPath) {
