@@ -22,6 +22,9 @@ fi
 
 sdl_include="$sysroot/usr/include/SDL2"
 sdl_lib="$sysroot/usr/lib/libSDL2.so"
+curl_include="$sysroot/usr/include"
+curl_header="$curl_include/curl/curl.h"
+curl_lib="$sysroot/usr/lib/libcurl.so"
 
 if [[ ! -f "$sdl_include/SDL.h" ]]; then
   echo "Missing SDL2 headers at: $sdl_include" >&2
@@ -32,6 +35,18 @@ fi
 if [[ ! -e "$sdl_lib" ]]; then
   echo "Missing SDL2 library at: $sdl_lib" >&2
   echo "Build the Luckfox SDK with SDL2 in the target sysroot." >&2
+  exit 1
+fi
+
+if [[ ! -f "$curl_header" ]]; then
+  echo "Missing libcurl headers at: $curl_header" >&2
+  echo "Build the Luckfox SDK with libcurl development headers in the target sysroot." >&2
+  exit 1
+fi
+
+if [[ ! -e "$curl_lib" ]]; then
+  echo "Missing libcurl library at: $curl_lib" >&2
+  echo "Build the Luckfox SDK with libcurl in the target sysroot." >&2
   exit 1
 fi
 
@@ -87,6 +102,8 @@ cmake \
   -DCMAKE_BUILD_TYPE=Release \
   -DMMB4L_SDL2_INCLUDE_DIR="$sdl_include" \
   -DMMB4L_SDL2_LIBRARY="$sdl_lib" \
+  -DMMB4L_CURL_INCLUDE_DIR="$curl_include" \
+  -DMMB4L_CURL_LIBRARY="$curl_lib" \
   -DCMAKE_C_FLAGS="-I$sdl_include" \
   -DCMAKE_CXX_FLAGS="-I$sdl_include" \
   -DCMAKE_EXE_LINKER_FLAGS="-L$sysroot/usr/lib -Wl,-rpath-link,$sysroot/usr/lib -Wl,-rpath-link,$sysroot/lib"

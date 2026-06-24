@@ -387,6 +387,36 @@ What it changes:
 Upstream suitability: target-specific. This preserves MMB4L's terminal prompt
 expectations while keeping PicoCalc program compatibility.
 
+### `0019-luckfox-https-rest-client.patch`
+
+Purpose: add Luckfox/Linux networking compatibility for REST and read-only
+WiFi status without making MMBasic own Linux network configuration.
+
+Why it is needed: WebMite programs expect network commands, but on Luckfox the
+Linux OS owns WiFi association, DHCP, routing, TLS certificates, and system
+time. BASIC programs still need a practical way to inspect WiFi state, scan,
+and make outbound HTTPS API calls.
+
+What it changes:
+
+- Links ARM builds against the Luckfox SDK `libcurl`.
+- Adds `WEB REST GET`, `WEB REST POST`, `WEB REST HEADER`, and
+  `WEB REST CLEAR HEADERS` backed by libcurl/OpenSSL.
+- Writes REST response bodies into longstring-compatible integer arrays and
+  optionally returns HTTP status codes.
+- Adds `WEB SCAN array%()` for captured SSID scan results.
+- Adds `WEB NTP [offset [, server$]]` as a compatibility no-op because Linux
+  owns the system clock.
+- Adds read-only `OPTION WIFI ssid$, password$`; it succeeds when Linux is
+  already connected to `ssid$` and otherwise points users at Linux networking
+  tools.
+- Makes Telnet, TFTP, UDP, and MQTT WEB command families fail explicitly
+  instead of pretending to be implemented.
+
+Upstream suitability: low as-is. The policy and libcurl backend are correct for
+Luckfox Linux, but upstream MMB4L would need a broader cross-Linux networking
+design before taking this surface.
+
 ## Patch Rules
 
 - Keep upstream `mmb4l/` as a clean submodule checkout whenever possible.

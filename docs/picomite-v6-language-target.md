@@ -39,17 +39,22 @@ Initial WebMite compatibility for this policy is read-only:
   IPv4 address, then the first non-loopback IPv4 address, or `0.0.0.0`.
 - `MM.INFO(WIFI STATUS)` reports whether a wireless interface is up.
 - `MM.INFO(TCPIP STATUS)` reports whether TCP/IP is ready, WiFi-only, or down.
-- `WEB SCAN` lists visible WiFi SSIDs using the Linux wireless stack. This is
-  partial because the PicoMite/WebMite `array%()` result form is not implemented
-  and user manual testing has reported a failure even though the file-based
-  smoke test passes.
+- `WEB SCAN` lists visible WiFi SSIDs using the Linux wireless stack.
+- `WEB SCAN array%()` writes visible SSIDs separated by CRLF into a
+  longstring-compatible integer array.
+- `OPTION WIFI ssid$, password$` is read-only compatibility: it succeeds if
+  Linux is already connected to `ssid$`, and otherwise tells the user to connect
+  using Linux networking tools.
+- `WEB NTP [offset [, server$]]` is a compatibility no-op because Linux owns
+  system time.
+- `WEB REST GET` and `WEB REST POST` provide native outbound HTTP/HTTPS REST
+  calls backed by libcurl/OpenSSL.
 
 Deferred or intentionally omitted from this network slice:
 
-- Telnet, TFTP, and NTP.
-- WiFi reconfiguration commands such as `OPTION WIFI` and parameterized
-  `WEB CONNECT`.
-- TCP, UDP, HTTP, MQTT, and WebSocket program I/O commands, which need separate
+- Telnet and TFTP.
+- WiFi reconfiguration commands such as parameterized `WEB CONNECT`.
+- TCP, UDP, MQTT, and WebSocket program I/O commands, which need separate
   Linux socket backends.
 - `OPTION WEB MESSAGES` is needed, but it is a web-backend message verbosity
   option rather than the request receiver itself. The inbound request path is

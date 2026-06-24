@@ -24,6 +24,8 @@ The build expects the SDK to provide:
 - `buildroot/output/rockchip_rk3506_picocalc_luckfox/host/bin/arm-buildroot-linux-gnueabihf-g++`
 - `buildroot/output/rockchip_rk3506_picocalc_luckfox/host/arm-buildroot-linux-gnueabihf/sysroot/usr/include/SDL2/SDL.h`
 - `buildroot/output/rockchip_rk3506_picocalc_luckfox/host/arm-buildroot-linux-gnueabihf/sysroot/usr/lib/libSDL2.so`
+- `buildroot/output/rockchip_rk3506_picocalc_luckfox/host/arm-buildroot-linux-gnueabihf/sysroot/usr/include/curl/curl.h`
+- `buildroot/output/rockchip_rk3506_picocalc_luckfox/host/arm-buildroot-linux-gnueabihf/sysroot/usr/lib/libcurl.so`
 
 ## Verify Environment
 
