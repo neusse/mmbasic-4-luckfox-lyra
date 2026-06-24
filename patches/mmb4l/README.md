@@ -342,6 +342,29 @@ What it changes:
 Upstream suitability: good candidate. This adds documented PicoMite language
 syntax without changing existing MMB4L command behaviour.
 
+### `0017-picocalc-print-at-graphics-cursor.patch`
+
+Purpose: make `PRINT @(x,y)` draw positioned text on the PicoCalc framebuffer.
+
+Why it is needed: PicoMite programs often mix `BOX`, `RBOX`, `TEXT`, and
+`PRINT @` for screen layouts. The graphics commands already draw to the
+PicoCalc DirectFB surface, but MMB4L's `AT()` function only emitted VT100
+cursor escapes, so positioned `PRINT` text went to the SSH/ADB terminal instead
+of the PicoCalc screen.
+
+What it changes:
+
+- Arms a PicoCalc graphics text cursor from `PRINT @(x,y)` when the default
+  display probe identifies the Luckfox PicoCalc framebuffer.
+- Mirrors subsequent console characters into the active graphics surface using
+  the current graphics font and colours until a line break ends the positioned
+  print.
+- Keeps the old VT100 terminal cursor behavior for non-PicoCalc targets.
+
+Upstream suitability: target-specific as implemented. A general upstream
+version would need a broader policy for when terminal `PRINT @` output should
+also target an active graphics surface.
+
 ## Patch Rules
 
 - Keep upstream `mmb4l/` as a clean submodule checkout whenever possible.
