@@ -1,4 +1,7 @@
+quiet
 no-cursor
+no-banner
+no-debug
 system=fbdev
 fbdev=/dev/fb0
 wm=default
@@ -7,3 +10,6 @@ depth=16
 pixelformat=RGB16
 no-vt
 no-vt-switch
+no-linux-input-grab
+disable-module=keyboard
+disable-module=linux_input

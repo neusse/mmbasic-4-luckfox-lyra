@@ -67,7 +67,10 @@ stable when launched from SSH/ADB or a nonstandard console.
 be:
 
 ```text
+quiet
 no-cursor
+no-banner
+no-debug
 system=fbdev
 fbdev=/dev/fb0
 wm=default
@@ -76,7 +79,20 @@ depth=16
 pixelformat=RGB16
 no-vt
 no-vt-switch
+no-linux-input-grab
+disable-module=keyboard
+disable-module=linux_input
 ```
+
+`quiet` suppresses the DirectFB startup, framebuffer, gamma-ramp, and Fusion
+diagnostics that otherwise remain on the physical console after a graphics
+program exits. `no-banner` removes the large DirectFB startup banner, and
+`no-debug` is harmless on this target but does not replace `quiet`.
+
+The two `disable-module` lines keep DirectFB from opening the PicoCalc keyboard
+through its own input drivers; MMBasic receives physical-console input through
+stdin instead. This avoids the bad key behavior seen when Linux console input
+and DirectFB input both consume the PicoCalc keyboard.
 
 Manual apply command:
 

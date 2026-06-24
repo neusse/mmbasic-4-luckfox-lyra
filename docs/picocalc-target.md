@@ -32,8 +32,13 @@ added later.
 
 For the current SDL2/DirectFB path, `/etc/directfbrc` should match
 `scripts/target/directfbrc`. The important target-specific settings are
-`system=fbdev`, `fbdev=/dev/fb0`, `mode=320x320`, `pixelformat=RGB16`,
-`no-vt`, and `no-vt-switch`.
+`quiet`, `system=fbdev`, `fbdev=/dev/fb0`, `mode=320x320`,
+`pixelformat=RGB16`, `no-vt`, `no-vt-switch`, `disable-module=keyboard`, and
+`disable-module=linux_input`.
+
+`quiet` suppresses DirectFB backend logs on the physical console. Without it,
+DirectFB startup, framebuffer, gamma-ramp, and Fusion diagnostics can remain on
+screen after a graphics program exits.
 
 For non-root runs, changing `/dev/fb0` and `/dev/tty0` to mode `666` has been
 observed to avoid display permission errors and improve graphics stability:
