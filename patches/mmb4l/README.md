@@ -324,6 +324,24 @@ What it changes:
 Upstream suitability: good candidate. This is documented PicoMite syntax and
 keeps existing positive-width behavior unchanged.
 
+### `0016-add-picomite-array-set-command.patch`
+
+Purpose: support PicoMite/WebMite `ARRAY SET value,array()`.
+
+Why it is needed: PicoMite programs use `ARRAY SET` to initialise numeric and
+string arrays. MMB4L had no `ARRAY` command entry, so those programs failed with
+`Unknown command` before reaching any array handling.
+
+What it changes:
+
+- Registers the `Array` command.
+- Adds `ARRAY SET` for whole integer, floating-point, and string arrays.
+- Fills every declared element across all dimensions while preserving MMBasic
+  string-length checks.
+
+Upstream suitability: good candidate. This adds documented PicoMite language
+syntax without changing existing MMB4L command behaviour.
+
 ## Patch Rules
 
 - Keep upstream `mmb4l/` as a clean submodule checkout whenever possible.

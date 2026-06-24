@@ -18,7 +18,7 @@ sha256sum mmbasic-luckfox-lyra-armv7l
 Expected checksum:
 
 ```text
-d14cff5780288e1667a02d6f635b1d890d52811e594ffc5fccb3353574d4920d  mmbasic-luckfox-lyra-armv7l
+492044f76924beeb79af535112e93c7bd5fdcd313d300c6bc66903ffc7b2ecc0  mmbasic-luckfox-lyra-armv7l
 ```
 
 For a no-build install, use the release bundle:
