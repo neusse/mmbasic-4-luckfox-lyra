@@ -14,6 +14,8 @@ dist/
 # Local deployment/test artifacts
 artifacts/
 logs/
+tmp/
+gamepack-*.tgz
 *.log
 
 # Editor and OS noise
@@ -25,6 +27,7 @@ Thumbs.db
 # Syncthing temporary files
 ~syncthing~*
 *.tmp
+__pycache__/
 
 # Local machine notes can be kept outside public docs
 *.local.md

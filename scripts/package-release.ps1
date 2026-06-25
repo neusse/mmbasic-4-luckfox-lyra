@@ -14,6 +14,7 @@ $buildBinary = Join-Path $repoRoot 'build\mmb4l-luckfox-release\mmbasic'
 $sourceRoot = Join-Path $repoRoot 'build\mmb4l-luckfox-source'
 $submoduleRoot = Join-Path $repoRoot 'mmb4l'
 $targetRunner = Join-Path $repoRoot 'scripts\target\mmb4l-run-tests.sh'
+$compatChecker = Join-Path $repoRoot 'tools\mmb4l_check_basic.py'
 $targetInstaller = Join-Path $repoRoot 'scripts\target\install-picocalc.sh'
 $directFbConfig = Join-Path $repoRoot 'scripts\target\directfbrc'
 $picocalcTests = Join-Path $repoRoot 'tests\picocalc'
@@ -27,7 +28,7 @@ $examplesDir = Join-Path $sourceRoot 'examples'
 $testsDir = Join-Path $sourceRoot 'tests'
 $sptoolsDir = Join-Path $sourceRoot 'sptools'
 
-foreach ($path in @($sourceRoot, $examplesDir, $testsDir, $sptoolsDir, $targetRunner, $targetInstaller, $directFbConfig, $picocalcTests, $replUsageDoc)) {
+foreach ($path in @($sourceRoot, $examplesDir, $testsDir, $sptoolsDir, $targetRunner, $compatChecker, $targetInstaller, $directFbConfig, $picocalcTests, $replUsageDoc)) {
   if (-not (Test-Path -LiteralPath $path)) {
     throw "Required release input not found: $path"
   }
@@ -70,6 +71,7 @@ try {
 
   Copy-Item -LiteralPath $standaloneBinary -Destination (Join-Path $bundleRoot 'bin\mmbasic') -Force
   Copy-Item -LiteralPath $targetRunner -Destination (Join-Path $bundleRoot 'bin\mmb4l-run-tests') -Force
+  Copy-Item -LiteralPath $compatChecker -Destination (Join-Path $bundleRoot 'bin\mmb4l-check-basic') -Force
   Copy-Item -LiteralPath $targetInstaller -Destination (Join-Path $bundleRoot 'install-picocalc.sh') -Force
   Copy-Item -LiteralPath $directFbConfig -Destination (Join-Path $bundleRoot 'etc\directfbrc') -Force
   Copy-Item -LiteralPath $replUsageDoc -Destination (Join-Path $bundleRoot 'docs\picocalc-repl-usage.md') -Force
@@ -96,6 +98,7 @@ The installer writes:
 
 - `/usr/local/bin/mmbasic`
 - `/usr/local/bin/mmb4l-run-tests`
+- `/usr/local/bin/mmb4l-check-basic`
 - `/usr/local/share/mmb4l`
 - `/etc/directfbrc`
 - `/usr/bin/mmbasic` and `/usr/bin/mmb4l-run-tests` symlinks
@@ -119,6 +122,12 @@ After installing, run:
 mmb4l-run-tests
 ```
 
+To scan a directory of BASIC programs for likely compatibility problems:
+
+```sh
+mmb4l-check-basic /mnt/sdcard/pico2w/mmbasic
+```
+
 Interactive use and graphics behavior are documented in
 `docs/picocalc-repl-usage.md`.
 '@
@@ -127,6 +136,7 @@ Interactive use and graphics behavior are documented in
   $bundleHashLines = @(
     "$(Get-Sha256Lower (Join-Path $bundleRoot 'bin\mmbasic'))  bin/mmbasic"
     "$(Get-Sha256Lower (Join-Path $bundleRoot 'bin\mmb4l-run-tests'))  bin/mmb4l-run-tests"
+    "$(Get-Sha256Lower (Join-Path $bundleRoot 'bin\mmb4l-check-basic'))  bin/mmb4l-check-basic"
     "$(Get-Sha256Lower (Join-Path $bundleRoot 'etc\directfbrc'))  etc/directfbrc"
     "$(Get-Sha256Lower (Join-Path $bundleRoot 'install-picocalc.sh'))  install-picocalc.sh"
   )

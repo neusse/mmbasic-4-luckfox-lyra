@@ -1,0 +1,102 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Codex <codex@example.com>
+Date: Thu, 25 Jun 2026 00:00:00 -0700
+Subject: [PATCH] Add PicoCalc PIXEL FILL flood fill
+
+PicoMite/WebMite graphics programs use `PIXEL FILL x, y, colour` to flood-fill
+the connected region containing a starting pixel. MMB4L only implemented the
+scalar and array `PIXEL x, y [, colour]` forms, so `PIXEL FILL` fell through to
+the default expression parser and failed at runtime.
+
+Add a small iterative flood-fill implementation over the active graphics
+surface. It works with the PicoCalc display surface and with off-screen pages
+selected by `PAGE WRITE`.
+---
+ src/commands/cmd_pixel.c | 57 ++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 57 insertions(+)
+
+diff --git a/src/commands/cmd_pixel.c b/src/commands/cmd_pixel.c
+--- a/src/commands/cmd_pixel.c
++++ b/src/commands/cmd_pixel.c
+@@ -42,6 +42,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ 
+ *******************************************************************************/
+ 
++#include <stdlib.h>
+ #include <string.h>
+ 
+ #include "../common/error.h"
+@@ -49,6 +50,59 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ #include "../common/mmb4l.h"
+ #include "../common/utility.h"
+ 
++typedef struct {
++    int x;
++    int y;
++} PixelFillPoint;
++
++static void cmd_pixel_fill_push(MmSurface *surface, PixelFillPoint *stack, size_t *top,
++                                int x, int y, uint32_t target_colour, uint32_t fill_colour) {
++    if (x < 0 || y < 0 || x >= surface->width || y >= surface->height) return;
++
++    const size_t offset = ((size_t)y * (size_t)surface->width) + (size_t)x;
++    if (surface->pixels[offset] != target_colour) return;
++
++    surface->pixels[offset] = fill_colour;
++    stack[(*top)++] = (PixelFillPoint){ x, y };
++}
++
++static MmResult cmd_pixel_fill(const char *p) {
++    getargs(&p, 5, ",");
++    if (argc != 5) return kArgumentCount;
++
++    MmSurface *surface = graphics_current;
++    if (!surface || surface->type == kGraphicsNone) return kGraphicsInvalidWriteSurface;
++
++    const int x = getinteger(argv[0]);
++    const int y = getinteger(argv[2]);
++    const uint32_t fill_colour = (uint32_t)getint(argv[4], RGB_BLACK, RGB_WHITE);
++
++    if (x < 0 || y < 0 || x >= surface->width || y >= surface->height) return kOk;
++
++    const size_t start = ((size_t)y * (size_t)surface->width) + (size_t)x;
++    const uint32_t target_colour = surface->pixels[start];
++    if (target_colour == fill_colour) return kOk;
++
++    const size_t capacity = (size_t)surface->width * (size_t)surface->height;
++    PixelFillPoint *stack = (PixelFillPoint *)malloc(capacity * sizeof(PixelFillPoint));
++    if (!stack) return kOutOfMemory;
++
++    size_t top = 0;
++    cmd_pixel_fill_push(surface, stack, &top, x, y, target_colour, fill_colour);
++
++    while (top > 0) {
++        PixelFillPoint point = stack[--top];
++        cmd_pixel_fill_push(surface, stack, &top, point.x + 1, point.y, target_colour, fill_colour);
++        cmd_pixel_fill_push(surface, stack, &top, point.x - 1, point.y, target_colour, fill_colour);
++        cmd_pixel_fill_push(surface, stack, &top, point.x, point.y + 1, target_colour, fill_colour);
++        cmd_pixel_fill_push(surface, stack, &top, point.x, point.y - 1, target_colour, fill_colour);
++    }
++
++    surface->dirty = true;
++    free(stack);
++    return kOk;
++}
++
+ static MmResult cmd_pixel_cmm1(const char *p) {
+     ERROR_UNIMPLEMENTED("cmd_pixel_cmm1");
+     return kUnimplemented;
+@@ -118,10 +172,13 @@ void cmd_pixel(void) {
+     if (!graphics_current) error_throw(kGraphicsInvalidWriteSurface);
+ 
+     MmResult result = kOk;
++    const char *p;
+     if (false /* CMM1 */) {
+         result = cmd_pixel_cmm1(cmdline);
++    } else if ((p = checkstring(cmdline, "FILL"))) {
++        result = cmd_pixel_fill(p);
+     } else {
+         result = cmd_pixel_default(cmdline);
+     }
+     ON_FAILURE_ERROR(result);
+ }

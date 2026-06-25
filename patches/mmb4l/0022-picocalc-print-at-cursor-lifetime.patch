@@ -1,0 +1,70 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Codex <codex@example.com>
+Date: Thu, 25 Jun 2026 00:00:00 -0700
+Subject: [PATCH] Keep PRINT AT graphics cursor scoped to one PRINT
+
+PicoCalc framebuffer mirroring for PRINT @(x,y) arms a graphics text cursor.
+When the PRINT ends with a semicolon there is no newline to disarm that cursor,
+so later unpositioned PRINT commands can keep drawing at the old framebuffer
+location. Old menu and game programs often mix positioned screen updates with
+normal PRINT output, and this corrupts the display.
+
+Clear any previously armed graphics cursor at the start of each PRINT command.
+If the current PRINT contains @(x,y), evaluating the AT function re-arms the
+cursor for that command.
+---
+ src/commands/cmd_print.c | 3 +++
+ src/common/graphics.c    | 4 ++++
+ src/common/graphics.h    | 3 +++
+ 3 files changed, 10 insertions(+)
+
+diff --git a/src/commands/cmd_print.c b/src/commands/cmd_print.c
+index be91c49..8d831d7 100644
+--- a/src/commands/cmd_print.c
++++ b/src/commands/cmd_print.c
+@@ -41,6 +41,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ #include "../common/mmb4l.h"
+ #include "../common/error.h"
+ #include "../common/file.h"
++#include "../common/graphics.h"
+ #include "../common/parse.h"
+ 
+ void cmd_print(void) {
+@@ -56,6 +57,8 @@ void cmd_print(void) {
+ 
+     getargs(&cmdline, (MAX_ARG_COUNT * 2) - 1, ";,");               // this is a macro and must be the first executable stmt
+ 
++    graphics_console_clear_cursor();
++
+     if (argc > 0 && *argv[0] == '#') {
+         // First argument is a file number.
+         fnbr = parse_file_number(argv[0], true);
+diff --git a/src/common/graphics.c b/src/common/graphics.c
+index 63abaa8..1698d62 100644
+--- a/src/common/graphics.c
++++ b/src/common/graphics.c
+@@ -254,6 +254,10 @@ bool graphics_console_set_cursor(int x, int y) {
+     return true;
+ }
+ 
++void graphics_console_clear_cursor(void) {
++    graphics_console_cursor_active = false;
++}
++
+ bool graphics_console_putc(char c) {
+     if (!graphics_console_cursor_active) return false;
+ 
+diff --git a/src/common/graphics.h b/src/common/graphics.h
+index 06b421b..c0dce1d 100644
+--- a/src/common/graphics.h
++++ b/src/common/graphics.h
+@@ -219,6 +219,9 @@ bool graphics_is_default_display_picocalc();
+ /** Sets the PicoCalc graphics cursor used by PRINT @(x,y). */
+ bool graphics_console_set_cursor(int x, int y);
+ 
++/** Clears any active PicoCalc graphics cursor from a prior PRINT @(x,y). */
++void graphics_console_clear_cursor(void);
++
+ /** Draws console output at the active PicoCalc graphics cursor when armed. */
+ bool graphics_console_putc(char c);
+ 

@@ -35,6 +35,7 @@ copy_tree() {
 
 require_file "$ROOT/bin/mmbasic"
 require_file "$ROOT/bin/mmb4l-run-tests"
+require_file "$ROOT/bin/mmb4l-check-basic"
 require_file "$ROOT/etc/directfbrc"
 require_dir "$ROOT/share/examples"
 require_dir "$ROOT/share/tests"
@@ -44,7 +45,8 @@ require_dir "$ROOT/share/sptools"
 mkdir -p "$BIN_DIR" "$SHARE_DIR"
 cp "$ROOT/bin/mmbasic" "$BIN_DIR/mmbasic"
 cp "$ROOT/bin/mmb4l-run-tests" "$BIN_DIR/mmb4l-run-tests"
-chmod 755 "$BIN_DIR/mmbasic" "$BIN_DIR/mmb4l-run-tests"
+cp "$ROOT/bin/mmb4l-check-basic" "$BIN_DIR/mmb4l-check-basic"
+chmod 755 "$BIN_DIR/mmbasic" "$BIN_DIR/mmb4l-run-tests" "$BIN_DIR/mmb4l-check-basic"
 
 copy_tree "$ROOT/share/examples" "$SHARE_DIR/examples"
 copy_tree "$ROOT/share/tests" "$SHARE_DIR/tests"
@@ -60,6 +62,7 @@ if [ -n "$PATH_BIN_DIR" ] && [ "$PATH_BIN_DIR" != "$BIN_DIR" ]; then
   mkdir -p "$PATH_BIN_DIR"
   ln -sf "$BIN_DIR/mmbasic" "$PATH_BIN_DIR/mmbasic"
   ln -sf "$BIN_DIR/mmb4l-run-tests" "$PATH_BIN_DIR/mmb4l-run-tests"
+  ln -sf "$BIN_DIR/mmb4l-check-basic" "$PATH_BIN_DIR/mmb4l-check-basic"
 fi
 
 if [ "$APPLY_DEVICE_PERMS" = "1" ]; then
@@ -69,6 +72,7 @@ fi
 
 echo "Installed mmbasic to $BIN_DIR/mmbasic"
 echo "Installed mmb4l-run-tests to $BIN_DIR/mmb4l-run-tests"
+echo "Installed mmb4l-check-basic to $BIN_DIR/mmb4l-check-basic"
 echo "Installed MMB4L share files to $SHARE_DIR"
 if [ -n "$DIRECTFB_CONFIG" ]; then
   echo "Installed DirectFB config to $DIRECTFB_CONFIG"

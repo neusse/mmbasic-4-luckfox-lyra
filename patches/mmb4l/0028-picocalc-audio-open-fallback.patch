@@ -1,0 +1,61 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Codex <codex@example.com>
+Date: Thu, 25 Jun 2026 00:00:00 -0700
+Subject: [PATCH] Degrade unavailable SDL audio to silent playback
+
+The Luckfox PicoCalc target may not expose a usable SDL/ALSA audio device.
+Old BASIC programs can still contain PLAY SOUND or PLAY STOP for feedback.
+Failing those commands aborts otherwise usable graphics and text programs.
+
+If SDL audio cannot be opened, disable audio for the current process and let
+PLAY commands continue silently. Systems with working audio still use the
+normal SDL backend.
+---
+ src/common/audio.c | 18 ++++++++++++------
+ 1 file changed, 12 insertions(+), 6 deletions(-)
+
+diff --git a/src/common/audio.c b/src/common/audio.c
+index 2f18de7..e1d496c 100644
+--- a/src/common/audio.c
++++ b/src/common/audio.c
+@@ -166,6 +166,16 @@ static void audio_callback(void *userdata, Uint8 *stream, int len);
+ 
+ static MmResult audio_play_next_track();
+ 
++static MmResult audio_open_or_disable(SDL_AudioSpec *spec) {
++    if (!mmb_options.audio) return kOk;
++
++    if (SUCCEEDED(SDL_OpenAudio(spec, NULL))) return kOk;
++
++    mmb_options.audio = 0;
++    SDL_ClearError();
++    return kOk;
++}
++
+ static void *audio_malloc(size_t sz, void *pUserData) { return GetMemory(sz); }
+ 
+ static void *audio_realloc(void *p, size_t sz, void *pUserData) { return ReAllocMemory((p), (sz)); }
+@@ -217,9 +227,7 @@ static MmResult audio_configure(int sample_rate, int num_channels) {
+             .callback = audio_callback,
+         };
+ 
+-        if (mmb_options.audio) {
+-            if (FAILED(SDL_OpenAudio(&audio_current_spec, NULL))) result = kAudioApiError;
+-        }
++        result = audio_open_or_disable(&audio_current_spec);
+ 
+         LOCK_AUDIO("audio_configure"); // Acquire lock on the new audio.
+     }
+@@ -250,9 +258,7 @@ MmResult audio_init() {
+             .callback = audio_callback,
+         };
+ 
+-        if (mmb_options.audio) {
+-            if (FAILED(SDL_OpenAudio(&audio_current_spec, NULL))) result = kAudioApiError;
+-        }
++        result = audio_open_or_disable(&audio_current_spec);
+     }
+ 
+     return result;
+-- 
+2.45.0

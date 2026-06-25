@@ -1,0 +1,47 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Codex <codex@example.com>
+Date: Thu, 25 Jun 2026 00:00:00 -0700
+Subject: [PATCH] Enable PAGE WRITE/COPY on PicoCalc framebuffer
+
+Some PicoMite/CMM2 graphics programs use `PAGE WRITE 1` to render into an
+off-screen page and `PAGE COPY 1 TO 0` to present it. MMB4L already has generic
+graphics surfaces and PAGE dispatch, but `PAGE` was rejected on devices other
+than CMM2/MMB4W before it reached the existing implementation.
+
+Allow PAGE on the detected PicoCalc framebuffer. Ensure the default display
+surface exists, and create page 1 as a same-size off-screen buffer so existing
+PAGE WRITE/COPY programs can run.
+---
+ src/commands/cmd_page.c | 19 ++++++++++++++++++-
+ 1 file changed, 18 insertions(+), 1 deletion(-)
+
+diff --git a/src/commands/cmd_page.c b/src/commands/cmd_page.c
+--- a/src/commands/cmd_page.c
++++ b/src/commands/cmd_page.c
+@@ -111,11 +111,25 @@ static MmResult cmd_page_xor_pixels(const char *p) {
+     return kUnimplemented;
+ }
+ 
++static MmResult cmd_page_ensure_picocalc_pages(void) {
++    if (!graphics_is_default_display_picocalc()) return kUnsupportedOnCurrentDevice;
++
++    ON_FAILURE_RETURN(graphics_ensure_default_display());
++
++    if (!graphics_surface_exists(1)) {
++        MmSurface *display = &graphics_surfaces[0];
++        ON_FAILURE_RETURN(graphics_buffer_create(1, display->width, display->height));
++    }
++
++    return kOk;
++}
++
+ void cmd_page(void) {
+     if (mmb_options.simulate != kSimulateCmm2
+             && mmb_options.simulate != kSimulateMmb4w) {
+-        ON_FAILURE_ERROR(kUnsupportedOnCurrentDevice);
++        ON_FAILURE_ERROR(cmd_page_ensure_picocalc_pages());
+     }
++
+     MmResult result = kOk;
+     const char *p;
+     if ((p = checkstring(cmdline, "WRITE"))) {

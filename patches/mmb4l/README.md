@@ -417,6 +417,232 @@ Upstream suitability: low as-is. The policy and libcurl backend are correct for
 Luckfox Linux, but upstream MMB4L would need a broader cross-Linux networking
 design before taking this surface.
 
+### `0020-picocalc-mode-compatibility-noop.patch`
+
+Purpose: let portable PicoMite/CMM2 graphics programs that begin with `MODE`
+run on the fixed Luckfox PicoCalc framebuffer.
+
+Why it is needed: the PicoCalc display has no switchable MMBasic video modes,
+but rejecting `MODE 1` stops otherwise-compatible programs before their drawing
+commands can use the 320x320 graphics surface.
+
+What it changes:
+
+- Accepts valid `MODE` syntax when the real PicoCalc framebuffer is detected.
+- Ensures the default 320x320 graphics surface exists.
+- Leaves simulated CMM2/MMB4W/PicoMiteVGA mode handling unchanged.
+- Keeps invalid/malformed `MODE` commands as errors.
+
+Upstream suitability: target-specific. A general upstream version would need a
+broader embedded-Linux display policy.
+
+### `0021-picocalc-mm-font-metric-aliases.patch`
+
+Purpose: support `MM.FONTWIDTH` and `MM.FONTHEIGHT` as direct PicoMite-style
+font metric aliases.
+
+Why it is needed: MMB4L already exposes these metrics through
+`MM.INFO(FONTWIDTH)` and `MM.INFO(FONTHEIGHT)`, but some PicoMite-era programs
+use the shorter `MM.FONTWIDTH` and `MM.FONTHEIGHT` forms when translating text
+columns and rows into pixels. Without tokens for those aliases, programs that
+do not use `Option Explicit` silently create ordinary variables with value
+zero, causing all positioned text to collapse to the same screen coordinate.
+
+What it changes:
+
+- Adds `MM.FontWidth` and `MM.FontHeight` no-argument function aliases.
+- Backs both aliases with the same graphics font metrics used by `MM.INFO`.
+- Adds a PicoCalc target regression test for the aliases.
+
+Upstream suitability: reasonable. The aliases are compatibility surface over
+existing font metrics, though upstream may prefer to confirm the exact dialects
+that publish these names.
+
+### `0022-picocalc-print-at-cursor-lifetime.patch`
+
+Purpose: keep the PicoCalc `PRINT @(x,y)` graphics cursor scoped to the current
+`PRINT` command.
+
+Why it is needed: `PRINT @(x,y) "text";` suppresses the newline, so the
+previous framebuffer cursor stayed armed and later unpositioned `PRINT`
+commands could continue drawing at the old graphics location. Slot-machine,
+menu, and calculator-style programs often mix positioned and normal output, so
+this produced smeared or duplicated screen text.
+
+What it changes:
+
+- Clears any old PicoCalc graphics print cursor at the start of each `PRINT`.
+- Lets the current `PRINT @(x,y)` re-arm the cursor normally when `@(...)` is
+  evaluated.
+- Adds a PicoCalc target regression test to ensure an unpositioned later
+  `PRINT` does not draw into the old framebuffer location.
+
+Upstream suitability: target-specific as long as the PicoCalc framebuffer
+mirroring remains target-specific. The lifetime rule is still broadly sensible
+for any future graphics-backed `PRINT @` implementation.
+
+### `0023-picocalc-beep-noop.patch`
+
+Purpose: accept old BASIC `BEEP` statements without requiring a working
+Luckfox/PicoCalc audio backend.
+
+Why it is needed: many text games and menu programs use `BEEP` for simple
+feedback. Rejecting the command stops the program even though the missing sound
+does not usually affect program logic.
+
+What it changes:
+
+- Adds `BEEP` as a visible MMBasic command.
+- Implements it as a compatibility no-op; it accepts the statement and
+  generates no audio.
+- Keeps `BEEP` visible in `LIST COMMANDS` so `mmb4l-check-basic` can identify
+  it and warn that audio is not currently supported.
+- Adds a PicoCalc target regression test for bare `BEEP` and argument-bearing
+  `BEEP`.
+
+Upstream suitability: target-specific as a policy choice. A fuller upstream
+implementation would likely route `BEEP` through the existing audio subsystem,
+but the no-op is useful for PicoCalc compatibility until audio hardware support
+is defined.
+
+### `0024-picocalc-drive-noop.patch`
+
+Purpose: accept old PicoMite-style `DRIVE "A:"` / `DRIVE "B:"` statements
+without changing Linux path behavior.
+
+Why it is needed: some SD card program menus select a DOS-style drive before
+running `CHDIR`. Linux has no A:/B: drive concept, and MMB4L already handles
+drive prefixes in path arguments, so rejecting `DRIVE` stops otherwise usable
+programs.
+
+What it changes:
+
+- Adds `DRIVE` as a visible MMBasic command.
+- Implements it as a compatibility no-op; Linux paths and `CHDIR` remain
+  authoritative.
+- Keeps `DRIVE` visible in `LIST COMMANDS` so `mmb4l-check-basic` can warn
+  users that no drive switch occurs.
+- Adds a PicoCalc target regression test that verifies `DRIVE` does not change
+  `CWD$`.
+
+Upstream suitability: target-specific as a compatibility policy. A fuller
+portability layer could map drive names to configured directories, but that is
+intentionally deferred because silent mount remapping can surprise relative
+path behavior.
+
+### `0025-picocalc-page-write-copy.patch`
+
+Purpose: enable `PAGE WRITE 1` and `PAGE COPY 1 TO 0` on the PicoCalc
+framebuffer.
+
+Why it is needed: some PicoMite/CMM2 graphics programs render into page 1 and
+copy that page to page 0 for presentation. MMB4L already has generic graphics
+surfaces and PAGE dispatch, but `PAGE` was rejected on non-CMM2/MMB4W targets
+before it reached the existing implementation.
+
+What it changes:
+
+- Allows `PAGE` on the detected PicoCalc framebuffer.
+- Ensures display page 0 exists before dispatch.
+- Creates page 1 as a same-size off-screen graphics buffer on first `PAGE` use.
+- Adds a PicoCalc target regression test for `PAGE WRITE 1` plus
+  `PAGE COPY 1 TO 0`.
+
+Upstream suitability: useful as a target-specific compatibility bridge. A more
+general upstream version may want configurable page creation policy, but this
+keeps PicoCalc behavior narrow and predictable.
+
+### `0026-picocalc-pixel-fill.patch`
+
+Purpose: support PicoMite/WebMite `PIXEL FILL x, y, colour` flood fill.
+
+Why it is needed: some graphics programs use `PIXEL FILL` to paint a connected
+region bounded by existing pixels. MMB4L only implemented `PIXEL x, y[, colour]`
+and array pixel plotting, so the `FILL` subcommand fell through to expression
+parsing and failed at runtime.
+
+What it changes:
+
+- Adds `PIXEL FILL x, y, colour` parsing under the existing `PIXEL` command.
+- Flood-fills the active graphics surface using four-neighbour connectivity.
+- Works with the PicoCalc default display and off-screen pages selected by
+  `PAGE WRITE`.
+- Adds a PicoCalc target regression test for bounded flood fill.
+
+Upstream suitability: reasonable as a compatibility feature. It is documented
+PicoMite/WebMite graphics syntax and is implemented against the existing generic
+MMB4L graphics surface.
+
+### `0027-picocalc-separate-sprite-page-ids.patch`
+
+Purpose: keep PicoCalc `SPRITE` IDs from colliding with `PAGE` surfaces.
+
+Why it is needed: PicoMite-style programs can use `PAGE WRITE 1` and
+`SPRITE READ 1` in the same program. The default MMB4L sprite mapping uses
+surface 1 for sprite 1, which collides with the PicoCalc off-screen page 1
+created by the PAGE compatibility patch.
+
+What it changes:
+
+- Uses the existing CMM2/PicoMite internal sprite ID offset when the PicoCalc
+  framebuffer is detected.
+- Keeps desktop/default MMB4L sprite IDs unchanged when not on PicoCalc.
+- Adds a PicoCalc target regression test proving `PAGE 1` and `SPRITE 1` can
+  coexist.
+
+Upstream suitability: target-specific as written. The general issue is a real
+dialect-compatibility concern, but the switch is tied to PicoCalc framebuffer
+detection.
+
+### `0028-picocalc-audio-open-fallback.patch`
+
+Purpose: let BASIC programs using `PLAY SOUND` continue when the PicoCalc has
+no usable SDL/ALSA audio device.
+
+Why it is needed: graphics and game programs often use `PLAY SOUND` for simple
+feedback. On the Luckfox PicoCalc target, SDL audio can fail to open with a
+hardware-parameter or permission error. Treating that as a fatal MMBasic error
+stops otherwise usable programs.
+
+What it changes:
+
+- Adds an audio-open helper that attempts the normal SDL audio path first.
+- If SDL audio cannot open, disables audio for the current process and returns
+  success.
+- Leaves systems with working audio on the normal SDL backend.
+- Adds a PicoCalc target regression test for `PLAY SOUND` plus `PLAY STOP`.
+
+Upstream suitability: compatibility-oriented. A more complete solution may add
+target audio configuration, but silent fallback is useful for no-audio embedded
+targets and keeps old BASIC programs running.
+
+### `0029-picocalc-continuation-lines.patch`
+
+Purpose: support PicoMite/WebMite-style source continuation lines using a
+space followed by `_` at the end of a physical line.
+
+Why it is needed: PicoMite V6 documentation describes continuation lines for
+splitting long BASIC statements. Without this support MMB4L treats `_` as a
+variable name, so `Option Explicit` reports `_ is not declared`; without
+`Option Explicit`, the next physical line can be parsed as a separate command
+and fail on a leading parenthesis.
+
+What it changes:
+
+- Joins continued physical source lines during program file loading before
+  tokenisation.
+- Removes the continuation marker (` _`) without inserting extra characters,
+  matching the documented concatenation model.
+- Keeps source error annotations pointed at the first physical line of the
+  continued statement.
+- Adds a PicoCalc regression test for continued arithmetic and boolean
+  expressions.
+
+Upstream suitability: reasonable as a PicoMite/WebMite language-compatibility
+feature. A fuller upstream implementation may add `OPTION CONTINUATION LINES`
+state; this patch enables the documented file-loading behavior for compatibility
+with existing programs.
+
 ## Patch Rules
 
 - Keep upstream `mmb4l/` as a clean submodule checkout whenever possible.

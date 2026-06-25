@@ -18,9 +18,10 @@ $testsDir = Join-Path $sourceRoot 'tests'
 $sptoolsDir = Join-Path $sourceRoot 'sptools'
 $picocalcTestsDir = Join-Path $repoRoot 'tests\picocalc'
 $targetRunner = Join-Path $repoRoot 'scripts\target\mmb4l-run-tests.sh'
+$compatChecker = Join-Path $repoRoot 'tools\mmb4l_check_basic.py'
 $directFbConfig = Join-Path $repoRoot 'scripts\target\directfbrc'
 
-foreach ($path in @($binary, $examplesDir, $testsDir, $sptoolsDir, $picocalcTestsDir, $targetRunner, $directFbConfig)) {
+foreach ($path in @($binary, $examplesDir, $testsDir, $sptoolsDir, $picocalcTestsDir, $targetRunner, $compatChecker, $directFbConfig)) {
   if (-not (Test-Path -LiteralPath $path)) {
     throw "Required path not found: $path"
   }
@@ -58,11 +59,13 @@ test -d "`$stage/share/tests"
 test -d "`$stage/share/picocalc-tests"
 test -d "`$stage/share/sptools"
 test -f "`$stage/mmb4l-run-tests.sh"
+test -f "`$stage/mmb4l-check-basic"
 
 mkdir -p "`$bin_dir" "`$share_dir"
 rm -rf "`$share_dir/examples" "`$share_dir/tests" "`$share_dir/sptools"
 
 cp "`$stage/mmbasic" "`$bin_dir/mmbasic"
+cp "`$stage/mmb4l-check-basic" "`$bin_dir/mmb4l-check-basic"
 cp -R "`$stage/share/examples" "`$share_dir/examples"
 cp -R "`$stage/share/tests" "`$share_dir/tests"
 mkdir -p "`$share_dir/tests/picocalc"
@@ -74,12 +77,13 @@ if [ -n "`$directfb_config_path" ]; then
   cp "`$stage/directfbrc" "`$directfb_config_path"
 fi
 
-chmod 755 "`$bin_dir/mmbasic" "`$bin_dir/mmb4l-run-tests"
+chmod 755 "`$bin_dir/mmbasic" "`$bin_dir/mmb4l-run-tests" "`$bin_dir/mmb4l-check-basic"
 
 if [ -n "`$path_bin_dir" ] && [ "`$path_bin_dir" != "`$bin_dir" ]; then
   mkdir -p "`$path_bin_dir"
   ln -sf "`$bin_dir/mmbasic" "`$path_bin_dir/mmbasic"
   ln -sf "`$bin_dir/mmb4l-run-tests" "`$path_bin_dir/mmb4l-run-tests"
+  ln -sf "`$bin_dir/mmb4l-check-basic" "`$path_bin_dir/mmb4l-check-basic"
 fi
 
 "`$bin_dir/mmbasic" --version
@@ -92,6 +96,7 @@ try {
   Invoke-Adb shell "rm -rf '$RemoteStage'; mkdir -p '$RemoteStage/share'"
   Invoke-Adb push $binary "$RemoteStage/mmbasic"
   Invoke-Adb push $targetRunner "$RemoteStage/mmb4l-run-tests.sh"
+  Invoke-Adb push $compatChecker "$RemoteStage/mmb4l-check-basic"
   Invoke-Adb push $directFbConfig "$RemoteStage/directfbrc"
   Invoke-Adb push $tempInstall "$RemoteStage/install.sh"
   Invoke-Adb push $examplesDir "$RemoteStage/share/"
@@ -101,7 +106,7 @@ try {
   Invoke-Adb shell "sh '$RemoteStage/install.sh'"
 
   if (-not $SkipSmoke) {
-    Invoke-Adb shell "command -v mmbasic; command -v mmb4l-run-tests; mmb4l-run-tests --smoke"
+    Invoke-Adb shell "command -v mmbasic; command -v mmb4l-run-tests; command -v mmb4l-check-basic; mmb4l-run-tests --smoke"
   }
 
   Write-Output "Installed mmbasic to $InstallBinDir/mmbasic"
@@ -112,6 +117,7 @@ try {
   Write-Output "Deployed PicoCalc target tests from $picocalcTestsDir"
   Write-Output "Installed examples/tests/sptools to $InstallShareDir"
   Write-Output "Installed test runner to $InstallBinDir/mmb4l-run-tests"
+  Write-Output "Installed compatibility checker to $InstallBinDir/mmb4l-check-basic"
   if ($DirectFbConfigPath) {
     Write-Output "Installed DirectFB config to $DirectFbConfigPath"
   }

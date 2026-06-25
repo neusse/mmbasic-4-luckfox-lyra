@@ -1,0 +1,59 @@
+From 7d33beff3617d3797b415760aa20b611d1bbf2c9 Mon Sep 17 00:00:00 2001
+From: Codex <codex@local>
+Date: Thu, 25 Jun 2026 00:00:00 -0700
+Subject: [PATCH] Treat MODE as PicoCalc display compatibility on Luckfox
+
+PicoMite/CMM2 demo programs commonly begin with MODE before drawing.  The
+Luckfox PicoCalc target has a fixed 320x320 framebuffer, so there is no real
+mode switch to perform, but rejecting MODE prevents otherwise-compatible
+programs from running.
+
+When the default display probe identifies the PicoCalc framebuffer, accept
+valid MODE syntax, keep the fixed display dimensions, and ensure the default
+graphics surface exists.  Simulated CMM2/MMB4W/PicoMiteVGA behavior is left
+unchanged, and malformed MODE commands still report errors.
+---
+ src/commands/cmd_mode.c | 21 +++++++++++++++++++++
+ 1 file changed, 21 insertions(+)
+
+diff --git a/src/commands/cmd_mode.c b/src/commands/cmd_mode.c
+index d86b5e9..8bd08dc 100644
+--- a/src/commands/cmd_mode.c
++++ b/src/commands/cmd_mode.c
+@@ -84,6 +84,24 @@ static MmResult cmd_mode_pmvga(void) {
+     return graphics_set_mode(mode, 32, RGB_BLACK);
+ }
+ 
++static MmResult cmd_mode_picocalc(void) {
++    getargs(&cmdline, 7, ",");
++    if ((argc % 2 == 0) || argc < 1) return kArgumentCount;
++
++    // The PicoCalc display is a fixed 320x320 framebuffer.  Accept valid
++    // MODE syntax so portable graphics programs can proceed, but keep the
++    // current framebuffer dimensions.
++    (void) getint(argv[0], MIN_CMM2_MODE, MAX_CMM2_MODE);
++    if (argc >= 3) {
++        (void) getint(argv[2], 0, 32);
++    }
++    if (argc >= 5) {
++        (void) getint(argv[4], RGB_BLACK, RGB_WHITE);
++    }
++    // 'interrupt' parameter is ignored by MMB4L.
++    return graphics_ensure_default_display();
++}
++
+ void cmd_mode(void) {
+     MmResult result = kOk;
+     switch (mmb_options.simulate) {
+@@ -97,6 +115,9 @@ void cmd_mode(void) {
+             result = cmd_mode_pmvga();
+             break;
+ 
++        case kSimulateMmb4l:
++            result = graphics_is_default_display_picocalc() ? cmd_mode_picocalc() : kUnsupportedOnCurrentDevice;
++            break;
+         default:
+             result = kUnsupportedOnCurrentDevice;
+             break;
+-- 
+2.45.0

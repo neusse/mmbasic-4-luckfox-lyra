@@ -1,0 +1,50 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Codex <codex@example.com>
+Date: Thu, 25 Jun 2026 00:00:00 -0700
+Subject: [PATCH] Accept DRIVE as a compatibility no-op
+
+PicoMite-era BASIC programs may select DOS-style drives before changing into
+an application directory, for example DRIVE "B:" followed by CHDIR "mmbasic".
+Linux has no A:/B: drive concept, and MMB4L already strips drive prefixes from
+path arguments where needed.
+
+Add DRIVE as a visible no-op command for the Luckfox/PicoCalc build so these
+programs keep running while Linux paths and CHDIR remain authoritative.
+---
+ src/commands/cmd_dummy.c | 4 ++++
+ src/core/commandtbl.c    | 1 +
+ src/core/commandtbl.h    | 1 +
+ 3 files changed, 6 insertions(+)
+
+diff --git a/src/commands/cmd_dummy.c b/src/commands/cmd_dummy.c
+--- a/src/commands/cmd_dummy.c
++++ b/src/commands/cmd_dummy.c
+@@ -54,3 +54,7 @@ void cmd_beep(void) {
+ void cmd_beep(void) {
+     // Compatibility no-op: audio output is not currently supported.
+ }
++
++void cmd_drive(void) {
++    // Compatibility no-op: Linux paths and CHDIR control location.
++}
+diff --git a/src/core/commandtbl.c b/src/core/commandtbl.c
+--- a/src/core/commandtbl.c
++++ b/src/core/commandtbl.c
+@@ -158,5 +158,6 @@ const struct s_tokentbl commandtbl[] = {
+     { "XModem",      T_CMD,              0, cmd_xmodem   },
+     { "Array",       T_CMD,              0, cmd_array   },
+     { "Beep",        T_CMD,              0, cmd_beep     },
++    { "Drive",       T_CMD,              0, cmd_drive    },
+     { "",            0,                  0, cmd_null,    }  // This dummy entry is always at the end.
+ };
+diff --git a/src/core/commandtbl.h b/src/core/commandtbl.h
+--- a/src/core/commandtbl.h
++++ b/src/core/commandtbl.h
+@@ -82,6 +82,7 @@ void cmd_cursor(void);
+ void cmd_dim(void);
+ void cmd_do(void);
+ void cmd_device(void);
++void cmd_drive(void);
+ void cmd_dummy(void);
+ void cmd_edit(void);
+ void cmd_else(void);

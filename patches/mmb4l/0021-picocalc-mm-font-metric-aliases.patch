@@ -1,0 +1,194 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Codex <codex@example.com>
+Date: Thu, 25 Jun 2026 00:00:00 -0700
+Subject: [PATCH] Add MM.FONTWIDTH and MM.FONTHEIGHT aliases
+
+Some PicoMite-era programs use MM.FONTWIDTH and MM.FONTHEIGHT directly
+when converting character-grid layouts to pixel coordinates. MMB4L already
+supports the same values through MM.INFO(FONTWIDTH) and
+MM.INFO(FONTHEIGHT), but the direct aliases were not tokenized, so programs
+without OPTION EXPLICIT silently treated them as ordinary variables with a
+default value of zero.
+
+Add the aliases as no-argument MM. functions backed by the same graphics font
+metrics used by MM.INFO.
+---
+ CMakeLists.txt                     |  2 ++
+ src/core/tokentbl.c                |  2 ++
+ src/core/tokentbl.h                |  2 ++
+ src/functions/fun_fontheight.c     | 49 +++++++++++++++++++++++++++++++
+ src/functions/fun_fontwidth.c      | 49 +++++++++++++++++++++++++++++++
+ src/functions/fun_mminfo.c         |  4 +--
+ 6 files changed, 106 insertions(+), 2 deletions(-)
+ create mode 100644 src/functions/fun_fontheight.c
+ create mode 100644 src/functions/fun_fontwidth.c
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index ecf18ac..51427f3 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -148,6 +148,8 @@ set(mmbasic_SOURCE
+     src/functions/fun_format.c
+     src/functions/fun_field.c
+     src/functions/fun_gamepad.c
++    src/functions/fun_fontheight.c
++    src/functions/fun_fontwidth.c
+     src/functions/fun_hres.c
+     src/functions/fun_inputstr.c
+     src/functions/fun_json.c
+diff --git a/src/core/tokentbl.c b/src/core/tokentbl.c
+index 9056414..d57bd0e 100644
+--- a/src/core/tokentbl.c
++++ b/src/core/tokentbl.c
+@@ -118,6 +118,8 @@ const struct s_tokentbl tokentbl[] = {
+     { "MM.Device$",  T_FNA | T_STR,      0, fun_mmdevice },
+     { "MM.ErrMsg$",  T_FNA | T_STR,      0, fun_errmsg   },
+     { "MM.Errno",    T_FNA | T_INT,      0, fun_errno    },
++    { "MM.FontHeight", T_FNA | T_INT,    0, fun_fontheight },
++    { "MM.FontWidth", T_FNA | T_INT,     0, fun_fontwidth },
+     { "MM.HRes",     T_FNA | T_INT,      0, fun_hres     },
+     { "MM.Info$(",   T_FUN | T_STR | T_INT | T_NBR, 0, fun_mminfo },
+     { "MM.Info(",    T_FUN | T_STR | T_INT | T_NBR, 0, fun_mminfo },
+diff --git a/src/core/tokentbl.h b/src/core/tokentbl.h
+index 2561ef4..09331e3 100644
+--- a/src/core/tokentbl.h
++++ b/src/core/tokentbl.h
+@@ -74,6 +74,8 @@ void fun_exp(void);
+ void fun_field(void);
+ void fun_fix(void);
+ void fun_format(void);
++void fun_fontheight(void);
++void fun_fontwidth(void);
+ void fun_gamepad(void);
+ void fun_hex(void);
+ void fun_hres(void);
+diff --git a/src/functions/fun_fontheight.c b/src/functions/fun_fontheight.c
+new file mode 100644
+index 0000000..d5d8eb7
+--- /dev/null
++++ b/src/functions/fun_fontheight.c
+@@ -0,0 +1,49 @@
++/*-*****************************************************************************
++
++MMBasic for Linux (MMB4L)
++
++fun_fontheight.c
++
++Copyright 2021-2024 Geoff Graham, Peter Mather and Thomas Hugo Williams.
++
++Redistribution and use in source and binary forms, with or without
++modification, are permitted provided that the following conditions are met:
++
++1. Redistributions of source code must retain the above copyright notice,
++   this list of conditions and the following disclaimer.
++
++2. Redistributions in binary form must reproduce the above copyright notice,
++   this list of conditions and the following disclaimer in the documentation
++   and/or other materials provided with the distribution.
++
++3. Neither the name of the copyright holders nor the names of its contributors
++   may be used to endorse or promote products derived from this software
++   without specific prior written permission.
++
++4. The name MMBasic be used when referring to the interpreter in any
++   documentation and promotional material and the original copyright message
++   be displayed  on the console at startup (additional copyright messages may
++   be added).
++
++5. All advertising materials mentioning features or use of this software must
++   display the following acknowledgement: This product includes software
++   developed by Geoff Graham, Peter Mather and Thomas Hugo Williams.
++
++THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
++ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
++WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
++DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDERS OR CONTRIBUTORS BE LIABLE
++FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
++DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
++SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
++CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
++OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
++OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
++
++*******************************************************************************/
++
++void mminfo_fontheight(const char *unused); // fun_mminfo.c
++
++void fun_fontheight(void) {
++    mminfo_fontheight("");
++}
+diff --git a/src/functions/fun_fontwidth.c b/src/functions/fun_fontwidth.c
+new file mode 100644
+index 0000000..86a2e61
+--- /dev/null
++++ b/src/functions/fun_fontwidth.c
+@@ -0,0 +1,49 @@
++/*-*****************************************************************************
++
++MMBasic for Linux (MMB4L)
++
++fun_fontwidth.c
++
++Copyright 2021-2024 Geoff Graham, Peter Mather and Thomas Hugo Williams.
++
++Redistribution and use in source and binary forms, with or without
++modification, are permitted provided that the following conditions are met:
++
++1. Redistributions of source code must retain the above copyright notice,
++   this list of conditions and the following disclaimer.
++
++2. Redistributions in binary form must reproduce the above copyright notice,
++   this list of conditions and the following disclaimer in the documentation
++   and/or other materials provided with the distribution.
++
++3. Neither the name of the copyright holders nor the names of its contributors
++   may be used to endorse or promote products derived from this software
++   without specific prior written permission.
++
++4. The name MMBasic be used when referring to the interpreter in any
++   documentation and promotional material and the original copyright message
++   be displayed  on the console at startup (additional copyright messages may
++   be added).
++
++5. All advertising materials mentioning features or use of this software must
++   display the following acknowledgement: This product includes software
++   developed by Geoff Graham, Peter Mather and Thomas Hugo Williams.
++
++THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
++ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
++WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
++DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDERS OR CONTRIBUTORS BE LIABLE
++FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
++DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
++SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
++CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
++OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
++OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
++
++*******************************************************************************/
++
++void mminfo_fontwidth(const char *unused); // fun_mminfo.c
++
++void fun_fontwidth(void) {
++    mminfo_fontwidth("");
++}
+diff --git a/src/functions/fun_mminfo.c b/src/functions/fun_mminfo.c
+index 5128d11..d82ddfc 100644
+--- a/src/functions/fun_mminfo.c
++++ b/src/functions/fun_mminfo.c
+@@ -282,13 +282,13 @@ static void mminfo_flash_address(const char *p) {
+     ON_FAILURE_ERROR(flash_get_addr(flash_index, (char **) &g_integer_rtn));
+ }
+ 
+-static void mminfo_fontheight(const char *p) {
++void mminfo_fontheight(const char *p) {
+     if (!parse_is_end(p)) ERROR_SYNTAX;
+     g_integer_rtn = font_height(graphics_font);
+     g_rtn_type = T_INT;
+ }
+ 
+-static void mminfo_fontwidth(const char *p) {
++void mminfo_fontwidth(const char *p) {
+     if (!parse_is_end(p)) ERROR_SYNTAX;
+     g_integer_rtn = font_width(graphics_font);
+     g_rtn_type = T_INT;

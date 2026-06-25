@@ -1,0 +1,53 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Codex <codex@example.com>
+Date: Thu, 25 Jun 2026 00:00:00 -0700
+Subject: [PATCH] Separate PicoCalc sprite IDs from page surfaces
+
+PicoMite-style programs can use `PAGE WRITE 1` and `SPRITE READ 1` in the same
+program. MMB4L default mode maps sprite ID 1 directly to graphics surface 1,
+which collides with the off-screen page 1 created for PicoCalc PAGE
+compatibility.
+
+When the Luckfox PicoCalc framebuffer is detected, use the existing
+CMM2/PicoMite internal sprite ID offset so BASIC sprite IDs live in a separate
+surface range from display pages and blit buffers.
+---
+ src/common/sprite.h | 15 ++++++++++-----
+ 1 file changed, 10 insertions(+), 5 deletions(-)
+
+diff --git a/src/common/sprite.h b/src/common/sprite.h
+--- a/src/common/sprite.h
++++ b/src/common/sprite.h
+@@ -165,7 +165,9 @@ MmResult sprite_hide_all();
+  *          255 otherwise.
+  */
+ static inline MmSurfaceId sprite_max_id() {
+-   return (mmb_options.simulate == kSimulateMmb4l) ? GRAPHICS_MAX_ID : CMM2_SPRITE_COUNT;
++   return (mmb_options.simulate == kSimulateMmb4l && !graphics_is_default_display_picocalc())
++       ? GRAPHICS_MAX_ID
++       : CMM2_SPRITE_COUNT;
+ }
+ 
+ /**
+@@ -181,7 +183,9 @@ static inline MmSurfaceId sprite_max_id() {
+ static inline MmSurfaceId sprite_id_to_surface_id(MmSurfaceId sprite_id) {
+    if (sprite_id < 0 || sprite_id > sprite_max_id()) {
+       return -1;
+-   } else if (sprite_id == 0 || mmb_options.simulate == kSimulateMmb4l) {
++   } else if (sprite_id == 0
++              || (mmb_options.simulate == kSimulateMmb4l
++                  && !graphics_is_default_display_picocalc())) {
+       return sprite_id;
+    } else {
+       return sprite_id + CMM2_SPRITE_BASE;
+@@ -199,7 +203,9 @@ static inline MmSurfaceId sprite_id_to_surface_id(MmSurfaceId sprite_id) {
+ static inline MmSurfaceId sprite_id_from_surface_id(MmSurfaceId surface_id) {
+    if (surface_id < 0 || surface_id > GRAPHICS_MAX_ID) {
+       return -1;
+-   } else if (surface_id == 0 || mmb_options.simulate == kSimulateMmb4l) {
++   } else if (surface_id == 0
++              || (mmb_options.simulate == kSimulateMmb4l
++                  && !graphics_is_default_display_picocalc())) {
+       return surface_id;
+    } else {
+       const MmSurfaceId sprite_id = surface_id - CMM2_SPRITE_BASE;

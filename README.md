@@ -181,6 +181,10 @@ Project-specific source changes should be stored as patches under
 `patches/mmb4l/` and applied to the submodule during build/setup. See
 [patches/mmb4l/README.md](patches/mmb4l/README.md).
 
+The release bundle also installs `mmb4l-check-basic`, a Python compatibility
+scanner for checking BASIC files against the installed command/function set.
+See [docs/basic-compatibility-checker.md](docs/basic-compatibility-checker.md).
+
 If the patch queue grows into a long-lived source fork, the next clean step is
 to fork `thwill1000/mmb4l`, point the submodule at that fork, and keep this
 repository as the repeatable build/documentation wrapper.

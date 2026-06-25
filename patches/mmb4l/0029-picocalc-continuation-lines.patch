@@ -1,0 +1,84 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Codex <codex@example.com>
+Date: Thu, 25 Jun 2026 00:00:00 -0700
+Subject: [PATCH] Join PicoMite-style continuation lines
+
+PicoMite/WebMite BASIC supports continuation lines by placing a space followed
+by an underscore at the end of a physical source line. Programs using this
+syntax should be loaded as a single logical line before tokenisation.
+
+MMB4L currently treats the underscore as an ordinary identifier character. With
+OPTION EXPLICIT this reports `_ is not declared`; without it the following line
+can be parsed as a new statement and fail with an invalid leading character.
+
+Join continuation lines during program file loading so expressions split across
+physical source lines are tokenised and executed as one BASIC statement.
+---
+ src/common/program.c | 26 +++++++++++++++++++++++++-
+ 1 file changed, 25 insertions(+), 1 deletion(-)
+
+diff --git a/src/common/program.c b/src/common/program.c
+index baef8dc..74b49ca 100644
+--- a/src/common/program.c
++++ b/src/common/program.c
+@@ -475,6 +475,11 @@ static MmResult program_process_line(char *line) {
+     return kOk;
+ }
+ 
++static bool program_line_continues(const char *line) {
++    size_t len = strlen(line);
++    return len >= 2 && line[len - 2] == ' ' && line[len - 1] == '_';
++}
++
+ static MmResult program_open_file(const char *filename) {
+     char full_path[STRINGSIZE];
+     MmResult result = program_file_stack->size == 0
+@@ -599,9 +604,15 @@ static MmResult program_handle_directive(const char *line) {
+ MmResult program_process_file() {
+     MmResult result = kOk;
+     program_comment_level = 0;
++    char logical_line[STRINGSIZE] = { '\0' };
++    int logical_line_num = 0;
+ 
+     for (;;) {
+         if (file_eof(program_file_stack->head->fnbr)) {
++            if (*logical_line) {
++                result = kSyntax;
++                break;
++            }
+             result = program_close_file();
+             if (FAILED(result)) break;
+             if (!program_file_stack->head) break;
+@@ -618,6 +629,21 @@ MmResult program_process_file() {
+         result = program_process_line(inpbuf);
+         if (FAILED(result)) break;
+ 
++        bool continues = program_line_continues(inpbuf);
++        if (continues) inpbuf[strlen(inpbuf) - 2] = '\0';
++
++        if (*inpbuf || continues || *logical_line) {
++            if (!*logical_line) logical_line_num = program_file_stack->head->line_num;
++            if (FAILED(cstring_cat(logical_line, inpbuf, STRINGSIZE))) {
++                result = kLineTooLong;
++                break;
++            }
++            if (continues) continue;
++
++            strcpy(inpbuf, logical_line);
++            logical_line[0] = '\0';
++        }
++
+         // Handle pre-processor directives.
+         // A directive must be the first/only thing on a line. Do not catch illegal usage here
+         // but instead rely on the interpreter reporting invalid usage of the # character.
+@@ -634,7 +660,7 @@ MmResult program_process_file() {
+                 if (SUCCEEDED(result)) result = cstring_cat(inpbuf, program_file_stack->head->filename, STRINGSIZE);
+                 if (SUCCEEDED(result)) result = cstring_cat(inpbuf, ",", STRINGSIZE);
+             }
+-            if (SUCCEEDED(result)) result = cstring_cat_int64(inpbuf, program_file_stack->head->line_num, STRINGSIZE);
++            if (SUCCEEDED(result)) result = cstring_cat_int64(inpbuf, logical_line_num, STRINGSIZE);
+             if (FAILED(result)) {
+                 result = kLineTooLong;
+                 break;
+-- 
+2.45.0
