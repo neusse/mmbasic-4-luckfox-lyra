@@ -793,6 +793,42 @@ Upstream suitability: partly reusable. The terminal/screen policy and
 diagnostic are useful embedded-Linux structure, but the virtual-console default
 and framebuffer renderer are PicoCalc-targeted.
 
+### `0035-picocalc-evdev-input.patch`
+
+Purpose: read the PicoCalc keyboard through Linux evdev when MMBasic owns the
+physical screen.
+
+Why it is needed: on the Luckfox PicoCalc the keyboard is exposed as a Linux
+input device (`Picocalc Keyboard`) at `/dev/input/event0`, with the stable path
+`/dev/input/by-path/platform-ff040000.i2c-event-kbd`. Reading raw tty bytes
+from the physical console can produce garbled or missing keys once framebuffer
+graphics are active.
+
+What it changes:
+
+- Adds a nonblocking PicoCalc evdev backend that pumps `struct input_event`
+  records into MMB4L's existing console RX buffer.
+- Uses the VM-style model where a platform keyboard backend decodes hardware
+  events, then feeds ordinary MMBasic key codes into shared console input.
+- In `SCREEN` console mode, `console_pump_input()` reads evdev and does not
+  read duplicate Linux tty bytes.
+- Keeps SSH/ADB and GUI terminal sessions on the existing stdin path.
+- Maps common printable keys, arrows, navigation keys, F1-F12, delete,
+  backspace, enter, escape, shift/control/alt/gui modifiers, and lock state.
+- Adds `MMB4L_PICOCALC_EVDEV=/path/to/event` as an override and `off|none|0`
+  as a disable switch.
+
+Current limitations:
+
+- The keymap is a practical PicoCalc/Linux evdev map, not a full international
+  keyboard layout engine.
+- Runtime permission for `/dev/input/event0` still depends on the Linux image's
+  device node permissions or user groups.
+
+Upstream suitability: mostly target-specific. The backend shape is generally
+useful for embedded Linux, but the default device path and keymap target the
+Luckfox PicoCalc.
+
 ## Patch Rules
 
 - Keep upstream `mmb4l/` as a clean submodule checkout whenever possible.

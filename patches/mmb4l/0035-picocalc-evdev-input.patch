@@ -1,0 +1,557 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 03bc542..2a47862 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -225,6 +225,7 @@ set(MMB4L_COMMON_SOURCE_FILES
+ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+     list(APPEND MMB4L_COMMON_SOURCE_FILES
+         src/common/picocalc_console.c
++        src/common/picocalc_evdev.c
+         src/common/picocalc_fbdev.c)
+ endif()
+ 
+diff --git a/src/common/console.c b/src/common/console.c
+index 454c1a1..ccd2a17 100644
+--- a/src/common/console.c
++++ b/src/common/console.c
+@@ -58,6 +58,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ #include "graphics.h"
+ #include "mmtime.h"
+ #include "picocalc_console.h"
++#include "picocalc_evdev.h"
+ #include "utility.h"
+ #include "rx_buf.h"
+ 
+@@ -121,6 +122,11 @@ void console_enable_raw_mode(void) {
+ }
+ 
+ void console_pump_input(void) {
++    if (console_use_picocalc_screen()) {
++        if (picocalc_evdev_service) (void) picocalc_evdev_service();
++        return;
++    }
++
+     char ch;
+     errno = 0;
+     ssize_t result = read(STDIN_FILENO, &ch, 1);
+diff --git a/src/common/keyboard.c b/src/common/keyboard.c
+index 2d70eb2..d1f8a4d 100644
+--- a/src/common/keyboard.c
++++ b/src/common/keyboard.c
+@@ -46,6 +46,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ #include "interrupt.h"
+ #include "keyboard.h"
+ #include "keyboard_ps2.h"
++#include "picocalc_evdev.h"
+ 
+ #include <assert.h>
+ #include <stdbool.h>
+@@ -307,6 +308,19 @@ MmResult keyboard_key_up(const SDL_Keysym* keysym) {
+     return keyboard_update_last_ps2_scancode(keysym, true);
+ }
+ 
++MmResult keyboard_mmbasic_key_event(char ch, bool down, bool repeat) {
++    if (!keyboard_initialised) keyboard_init();
++    if (!ch) return kOk;
++
++    if (down) {
++        if (!repeat) keyboard_keys_add(ch);
++        console_put_keypress(ch);
++    } else {
++        keyboard_keys_remove(ch);
++    }
++    return kOk;
++}
++
+ int keyboard_num_keys() {
+     assert(keyboard_initialised);
+     return keyboard_keys_count;
+@@ -320,6 +334,9 @@ int keyboard_get_key(int i) {
+ 
+ int keyboard_get_modifiers() {
+     assert(keyboard_initialised);
++    int evdev_modifiers = picocalc_evdev_get_modifiers ? picocalc_evdev_get_modifiers() : -1;
++    if (evdev_modifiers >= 0) return evdev_modifiers;
++
+     int modifiers = 0x0;
+     SDL_Keymod sdl_mods = SDL_GetModState();
+     if (sdl_mods & KMOD_LALT) modifiers |= kLeftAlt;
+@@ -335,6 +352,9 @@ int keyboard_get_modifiers() {
+ 
+ int keyboard_get_locks() {
+     assert(keyboard_initialised);
++    int evdev_locks = picocalc_evdev_get_locks ? picocalc_evdev_get_locks() : -1;
++    if (evdev_locks >= 0) return evdev_locks;
++
+     int locks = 0x0;
+     SDL_Keymod sdl_mods = SDL_GetModState();
+     if (sdl_mods & KMOD_CAPS) locks |= kCapsLock;
+diff --git a/src/common/keyboard.h b/src/common/keyboard.h
+index f21d997..9ca5159 100644
+--- a/src/common/keyboard.h
++++ b/src/common/keyboard.h
+@@ -75,6 +75,9 @@ MmResult keyboard_key_down(const SDL_Keysym* keysym);
+ /** Handles a key release. */
+ MmResult keyboard_key_up(const SDL_Keysym* keysym);
+ 
++/** Handles an already-decoded MMBasic key press/release from a non-SDL backend. */
++MmResult keyboard_mmbasic_key_event(char ch, bool down, bool repeat);
++
+ /** Gets the number of keys (max 10) currently held down. */
+ int keyboard_num_keys();
+ 
+diff --git a/src/common/picocalc_evdev.c b/src/common/picocalc_evdev.c
+new file mode 100644
+index 0000000..1ef3f29
+--- /dev/null
++++ b/src/common/picocalc_evdev.c
+@@ -0,0 +1,372 @@
++/*-*****************************************************************************
++
++MMBasic for Linux (MMB4L)
++
++picocalc_evdev.c
++
++Copyright 2021-2024 Geoff Graham, Peter Mather and Thomas Hugo Williams.
++
++Redistribution and use in source and binary forms, with or without
++modification, are permitted provided that the following conditions are met:
++
++1. Redistributions of source code must retain the above copyright notice,
++   this list of conditions and the following disclaimer.
++
++2. Redistributions in binary form must reproduce the above copyright notice,
++   this list of conditions and the following disclaimer in the documentation
++   and/or other materials provided with the distribution.
++
++3. Neither the name of the copyright holders nor the names of its contributors
++   may be used to endorse or promote products derived from this software
++   without specific prior written permission.
++
++4. The name MMBasic be used when referring to the interpreter in any
++   documentation and promotional material and the original copyright message
++   be displayed  on the console at startup (additional copyright messages may
++   be added).
++
++5. All advertising materials mentioning features or use of this software must
++   display the following acknowledgement: This product includes software
++   developed by Geoff Graham, Peter Mather and Thomas Hugo Williams.
++
++THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
++ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
++WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
++DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDERS OR CONTRIBUTORS BE LIABLE
++FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
++DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
++SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
++CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
++OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
++OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
++
++*******************************************************************************/
++
++#include "picocalc_evdev.h"
++
++#include "console.h"
++#include "keyboard.h"
++#include "picocalc_console.h"
++#include "utility.h"
++
++#include <errno.h>
++#include <fcntl.h>
++#include <linux/input.h>
++#include <stdbool.h>
++#include <stdint.h>
++#include <stdlib.h>
++#include <string.h>
++#include <strings.h>
++#include <unistd.h>
++
++#if !defined(O_CLOEXEC)
++#define O_CLOEXEC 0
++#endif
++
++typedef struct {
++    uint16_t code;
++    char normal;
++    char shifted;
++} EvdevKeyMap;
++
++static const char *PICOCALC_EVDEV_DEFAULT_PATHS[] = {
++    "/dev/input/by-path/platform-ff040000.i2c-event-kbd",
++    "/dev/input/event0",
++    NULL
++};
++
++static const EvdevKeyMap PICOCALC_EVDEV_KEYS[] = {
++    { KEY_1, '1', '!' },
++    { KEY_2, '2', '@' },
++    { KEY_3, '3', '#' },
++    { KEY_4, '4', '$' },
++    { KEY_5, '5', '%' },
++    { KEY_6, '6', '^' },
++    { KEY_7, '7', '&' },
++    { KEY_8, '8', '*' },
++    { KEY_9, '9', '(' },
++    { KEY_0, '0', ')' },
++    { KEY_A, 'a', 'A' },
++    { KEY_B, 'b', 'B' },
++    { KEY_C, 'c', 'C' },
++    { KEY_D, 'd', 'D' },
++    { KEY_E, 'e', 'E' },
++    { KEY_F, 'f', 'F' },
++    { KEY_G, 'g', 'G' },
++    { KEY_H, 'h', 'H' },
++    { KEY_I, 'i', 'I' },
++    { KEY_J, 'j', 'J' },
++    { KEY_K, 'k', 'K' },
++    { KEY_L, 'l', 'L' },
++    { KEY_M, 'm', 'M' },
++    { KEY_N, 'n', 'N' },
++    { KEY_O, 'o', 'O' },
++    { KEY_P, 'p', 'P' },
++    { KEY_Q, 'q', 'Q' },
++    { KEY_R, 'r', 'R' },
++    { KEY_S, 's', 'S' },
++    { KEY_T, 't', 'T' },
++    { KEY_U, 'u', 'U' },
++    { KEY_V, 'v', 'V' },
++    { KEY_W, 'w', 'W' },
++    { KEY_X, 'x', 'X' },
++    { KEY_Y, 'y', 'Y' },
++    { KEY_Z, 'z', 'Z' },
++    { KEY_MINUS, '-', '_' },
++    { KEY_EQUAL, '=', '+' },
++    { KEY_LEFTBRACE, '[', '{' },
++    { KEY_RIGHTBRACE, ']', '}' },
++    { KEY_BACKSLASH, '\\', '|' },
++    { KEY_SEMICOLON, ';', ':' },
++    { KEY_APOSTROPHE, '\'', '"' },
++    { KEY_GRAVE, '`', '~' },
++    { KEY_COMMA, ',', '<' },
++    { KEY_DOT, '.', '>' },
++    { KEY_SLASH, '/', '?' },
++    { KEY_SPACE, ' ', ' ' },
++    { KEY_KP0, '0', '0' },
++    { KEY_KP1, '1', '1' },
++    { KEY_KP2, '2', '2' },
++    { KEY_KP3, '3', '3' },
++    { KEY_KP4, '4', '4' },
++    { KEY_KP5, '5', '5' },
++    { KEY_KP6, '6', '6' },
++    { KEY_KP7, '7', '7' },
++    { KEY_KP8, '8', '8' },
++    { KEY_KP9, '9', '9' },
++    { KEY_KPDOT, '.', '.' },
++    { KEY_KPMINUS, '-', '-' },
++    { KEY_KPPLUS, '+', '+' },
++    { KEY_KPASTERISK, '*', '*' },
++    { KEY_KPSLASH, '/', '/' },
++    { 0, 0, 0 }
++};
++
++static int picocalc_evdev_fd = -1;
++static bool picocalc_evdev_disabled = false;
++static int picocalc_evdev_modifiers = 0;
++static int picocalc_evdev_locks = 0;
++static char picocalc_evdev_open_path[128] = { 0 };
++static unsigned char picocalc_evdev_pressed[KEY_MAX + 1];
++
++static bool picocalc_evdev_env_is(const char *value, const char *expected) {
++    return value && strcasecmp(value, expected) == 0;
++}
++
++static bool picocalc_evdev_is_shifted(void) {
++    return (picocalc_evdev_modifiers & (kLeftShift | kRightShift)) != 0;
++}
++
++static void picocalc_evdev_set_modifier(int bit, bool down) {
++    if (down) picocalc_evdev_modifiers |= bit;
++    else picocalc_evdev_modifiers &= ~bit;
++}
++
++static bool picocalc_evdev_update_modifier(uint16_t code, bool down, bool repeat) {
++    switch (code) {
++        case KEY_LEFTSHIFT:
++            picocalc_evdev_set_modifier(kLeftShift, down);
++            return true;
++        case KEY_RIGHTSHIFT:
++            picocalc_evdev_set_modifier(kRightShift, down);
++            return true;
++        case KEY_LEFTCTRL:
++            picocalc_evdev_set_modifier(kLeftCtrl, down);
++            return true;
++        case KEY_RIGHTCTRL:
++            picocalc_evdev_set_modifier(kRightCtrl, down);
++            return true;
++        case KEY_LEFTALT:
++            picocalc_evdev_set_modifier(kLeftAlt, down);
++            return true;
++        case KEY_RIGHTALT:
++            picocalc_evdev_set_modifier(kRightAlt, down);
++            return true;
++        case KEY_LEFTMETA:
++            picocalc_evdev_set_modifier(kLeftGui, down);
++            return true;
++        case KEY_RIGHTMETA:
++            picocalc_evdev_set_modifier(kRightGui, down);
++            return true;
++        case KEY_CAPSLOCK:
++            if (down && !repeat) picocalc_evdev_locks ^= kCapsLock;
++            return true;
++        case KEY_NUMLOCK:
++            if (down && !repeat) picocalc_evdev_locks ^= kNumLock;
++            return true;
++#if defined(KEY_SCROLLLOCK)
++        case KEY_SCROLLLOCK:
++            if (down && !repeat) picocalc_evdev_locks ^= kScrollLock;
++            return true;
++#endif
++        default:
++            return false;
++    }
++}
++
++static int picocalc_evdev_translate_special(uint16_t code) {
++    switch (code) {
++        case KEY_BACKSPACE: return BKSP;
++        case KEY_ENTER: return ENTER;
++        case KEY_KPENTER: return ENTER;
++        case KEY_ESC: return ESC;
++        case KEY_TAB: return TAB;
++        case KEY_DELETE: return DEL;
++        case KEY_INSERT: return INSERT;
++        case KEY_HOME: return HOME;
++        case KEY_END: return END;
++        case KEY_PAGEUP: return PUP;
++        case KEY_PAGEDOWN: return PDOWN;
++        case KEY_UP: return UP;
++        case KEY_DOWN: return DOWN;
++        case KEY_LEFT: return LEFT;
++        case KEY_RIGHT: return RIGHT;
++        case KEY_F1: return F1;
++        case KEY_F2: return F2;
++        case KEY_F3: return F3;
++        case KEY_F4: return F4;
++        case KEY_F5: return F5;
++        case KEY_F6: return F6;
++        case KEY_F7: return F7;
++        case KEY_F8: return F8;
++        case KEY_F9: return F9;
++        case KEY_F10: return F10;
++        case KEY_F11: return F11;
++        case KEY_F12: return F12;
++        case KEY_PAUSE: return BREAK;
++        default: return 0;
++    }
++}
++
++static int picocalc_evdev_translate_key(uint16_t code) {
++    int special = picocalc_evdev_translate_special(code);
++    if (special) return special;
++
++    for (const EvdevKeyMap *m = PICOCALC_EVDEV_KEYS; m->code; ++m) {
++        if (m->code != code) continue;
++
++        bool shifted = picocalc_evdev_is_shifted();
++        if (m->normal >= 'a' && m->normal <= 'z') {
++            shifted = shifted ^ ((picocalc_evdev_locks & kCapsLock) != 0);
++        }
++
++        int ch = shifted ? m->shifted : m->normal;
++        if ((picocalc_evdev_modifiers & (kLeftCtrl | kRightCtrl)) != 0) {
++            if (ch >= 'a' && ch <= 'z') ch = ch - 'a' + 1;
++            else if (ch >= 'A' && ch <= 'Z') ch = ch - 'A' + 1;
++        }
++        return ch;
++    }
++    return 0;
++}
++
++static MmResult picocalc_evdev_try_open(const char *path) {
++    int fd = open(path, O_RDONLY | O_NONBLOCK | O_CLOEXEC);
++    if (fd < 0) return errno ? errno : kError;
++
++    picocalc_evdev_fd = fd;
++    strncpy(picocalc_evdev_open_path, path, sizeof(picocalc_evdev_open_path) - 1);
++    picocalc_evdev_open_path[sizeof(picocalc_evdev_open_path) - 1] = '\0';
++    return kOk;
++}
++
++static MmResult picocalc_evdev_open(void) {
++    if (picocalc_evdev_fd >= 0 || picocalc_evdev_disabled) return kOk;
++
++    const char *env = getenv("MMB4L_PICOCALC_EVDEV");
++    if (picocalc_evdev_env_is(env, "off")
++            || picocalc_evdev_env_is(env, "none")
++            || picocalc_evdev_env_is(env, "0")
++            || picocalc_evdev_env_is(env, "false")
++            || picocalc_evdev_env_is(env, "no")) {
++        picocalc_evdev_disabled = true;
++        return kOk;
++    }
++
++    if (env && *env) {
++        MmResult result = picocalc_evdev_try_open(env);
++        if (FAILED(result)) picocalc_evdev_disabled = true;
++        return result;
++    }
++
++    MmResult last = kFileNotFound;
++    for (const char **path = PICOCALC_EVDEV_DEFAULT_PATHS; *path; ++path) {
++        last = picocalc_evdev_try_open(*path);
++        if (SUCCEEDED(last)) return kOk;
++    }
++    picocalc_evdev_disabled = true;
++    return last;
++}
++
++static void picocalc_evdev_handle_key(uint16_t code, int32_t value) {
++    if (code > KEY_MAX) return;
++
++    const bool repeat = value == 2;
++    const bool down = value != 0;
++    if (picocalc_evdev_update_modifier(code, down, repeat)) return;
++
++    int ch = 0;
++    if (down) {
++        ch = picocalc_evdev_translate_key(code);
++        if (ch) {
++            picocalc_evdev_pressed[code] = (unsigned char) ch;
++            (void) keyboard_mmbasic_key_event((char) ch, true, repeat);
++        }
++    } else {
++        ch = picocalc_evdev_pressed[code];
++        if (!ch) ch = picocalc_evdev_translate_key(code);
++        picocalc_evdev_pressed[code] = 0;
++        if (ch) (void) keyboard_mmbasic_key_event((char) ch, false, false);
++    }
++}
++
++MmResult picocalc_evdev_service(void) {
++    if (!picocalc_console_uses_screen()) return kOk;
++
++    MmResult result = picocalc_evdev_open();
++    if (FAILED(result) || picocalc_evdev_fd < 0) return result;
++
++    struct input_event events[16];
++    for (;;) {
++        ssize_t nread = read(picocalc_evdev_fd, events, sizeof(events));
++        if (nread < 0) {
++            if (errno == EAGAIN || errno == EWOULDBLOCK) return kOk;
++            result = errno ? errno : kError;
++            close(picocalc_evdev_fd);
++            picocalc_evdev_fd = -1;
++            picocalc_evdev_disabled = true;
++            return result;
++        }
++        if (nread == 0) return kOk;
++
++        ssize_t count = nread / (ssize_t) sizeof(struct input_event);
++        for (ssize_t i = 0; i < count; ++i) {
++            if (events[i].type == EV_KEY) {
++                picocalc_evdev_handle_key(events[i].code, events[i].value);
++            }
++        }
++        if ((size_t) nread < sizeof(events)) return kOk;
++    }
++}
++
++const char *picocalc_evdev_path(void) {
++    return picocalc_evdev_open_path;
++}
++
++int picocalc_evdev_get_modifiers(void) {
++    return picocalc_console_uses_screen() ? picocalc_evdev_modifiers : -1;
++}
++
++int picocalc_evdev_get_locks(void) {
++    return picocalc_console_uses_screen() ? picocalc_evdev_locks : -1;
++}
++
++void picocalc_evdev_reset(void) {
++    if (picocalc_evdev_fd >= 0) close(picocalc_evdev_fd);
++    picocalc_evdev_fd = -1;
++    picocalc_evdev_disabled = false;
++    picocalc_evdev_modifiers = 0;
++    picocalc_evdev_locks = 0;
++    memset(picocalc_evdev_open_path, 0, sizeof(picocalc_evdev_open_path));
++    memset(picocalc_evdev_pressed, 0, sizeof(picocalc_evdev_pressed));
++}
+diff --git a/src/common/picocalc_evdev.h b/src/common/picocalc_evdev.h
+new file mode 100644
+index 0000000..1da93d9
+--- /dev/null
++++ b/src/common/picocalc_evdev.h
+@@ -0,0 +1,71 @@
++/*-*****************************************************************************
++
++MMBasic for Linux (MMB4L)
++
++picocalc_evdev.h
++
++Copyright 2021-2024 Geoff Graham, Peter Mather and Thomas Hugo Williams.
++
++Redistribution and use in source and binary forms, with or without
++modification, are permitted provided that the following conditions are met:
++
++1. Redistributions of source code must retain the above copyright notice,
++   this list of conditions and the following disclaimer.
++
++2. Redistributions in binary form must reproduce the above copyright notice,
++   this list of conditions and the following disclaimer in the documentation
++   and/or other materials provided with the distribution.
++
++3. Neither the name of the copyright holders nor the names of its contributors
++   may be used to endorse or promote products derived from this software
++   without specific prior written permission.
++
++4. The name MMBasic be used when referring to the interpreter in any
++   documentation and promotional material and the original copyright message
++   be displayed  on the console at startup (additional copyright messages may
++   be added).
++
++5. All advertising materials mentioning features or use of this software must
++   display the following acknowledgement: This product includes software
++   developed by Geoff Graham, Peter Mather and Thomas Hugo Williams.
++
++THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
++ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
++WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
++DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDERS OR CONTRIBUTORS BE LIABLE
++FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
++DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
++SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
++CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
++OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
++OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
++
++*******************************************************************************/
++
++#if !defined(MMBASIC_PICOCALC_EVDEV_H)
++#define MMBASIC_PICOCALC_EVDEV_H
++
++#include "mmresult.h"
++
++#if defined(__GNUC__)
++#define PICOCALC_EVDEV_WEAK __attribute__((weak))
++#else
++#define PICOCALC_EVDEV_WEAK
++#endif
++
++/** Pumps pending Linux evdev keyboard events into the MMBasic console buffer. */
++MmResult picocalc_evdev_service(void) PICOCALC_EVDEV_WEAK;
++
++/** Returns the configured evdev path, or an empty string when disabled/unopened. */
++const char *picocalc_evdev_path(void) PICOCALC_EVDEV_WEAK;
++
++/** Returns current modifier bits, or -1 when the evdev backend is inactive. */
++int picocalc_evdev_get_modifiers(void) PICOCALC_EVDEV_WEAK;
++
++/** Returns current lock bits, or -1 when the evdev backend is inactive. */
++int picocalc_evdev_get_locks(void) PICOCALC_EVDEV_WEAK;
++
++/** Drops cached file descriptor and state. Primarily useful for tests. */
++void picocalc_evdev_reset(void) PICOCALC_EVDEV_WEAK;
++
++#endif // #if !defined(MMBASIC_PICOCALC_EVDEV_H)
