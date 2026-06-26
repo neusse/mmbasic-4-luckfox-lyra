@@ -829,6 +829,34 @@ Upstream suitability: mostly target-specific. The backend shape is generally
 useful for embedded Linux, but the default device path and keymap target the
 Luckfox PicoCalc.
 
+### `0036-picocalc-page-blit-surface-map.patch`
+
+Purpose: keep BASIC-visible page and blit IDs separate from the internal fbdev
+framebuffer surfaces.
+
+Why it is needed: the native fbdev path reserves internal surfaces 1, 2, and 3
+for framebuffer N/F/L. PicoCalc compatibility programs still expect `PAGE 1`,
+`BLIT READ 1`, and `SPRITE READ 1` to be independent user-visible objects.
+Without a mapping layer, page and blit commands collide with framebuffer N.
+
+What it changes:
+
+- Maps PicoCalc BASIC page 0 to framebuffer N, and maps BASIC page 1..60 to
+  internal surfaces 4..63.
+- Maps PicoCalc BLIT IDs into the existing CMM2-style blit surface range
+  64..127.
+- Keeps sprite IDs in the separate CMM2-style sprite range from patch `0027`.
+- Makes `PAGE WRITE` and `PAGE COPY` parse page IDs directly instead of
+  forwarding to the raw `GRAPHICS WRITE` / `GRAPHICS COPY` surface commands.
+
+Current limitations:
+
+- PicoCalc page compatibility is intentionally small and practical: page 0 plus
+  pages 1..60. It does not implement the full CMM2 mode/page model.
+
+Upstream suitability: target-specific unless upstream adds a general
+platform-visible-ID to graphics-surface mapping layer.
+
 ## Patch Rules
 
 - Keep upstream `mmb4l/` as a clean submodule checkout whenever possible.

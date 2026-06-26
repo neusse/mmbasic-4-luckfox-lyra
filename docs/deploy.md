@@ -77,20 +77,22 @@ The bundle installs the same target layout as `scripts/deploy-mmbasic.ps1`:
 
 - `mmbasic` to `/usr/local/bin/mmbasic`
 - `mmb4l-run-tests` to `/usr/local/bin/mmb4l-run-tests`
+- `mmb4l-check-basic` to `/usr/local/bin/mmb4l-check-basic`
 - PATH-visible links under `/usr/bin`
 - examples, tests, PicoCalc tests, and `sptools` under
   `/usr/local/share/mmb4l`
-- `directfbrc` to `/etc/directfbrc`
+- host-side fbdev screenshot verification script under
+  `scripts/verify-picocalc-fbdev.ps1`
 
-By default, `install-picocalc.sh` also applies the current device-permission
-workaround:
+`install-picocalc.sh` does not change device permissions by default. For a
+quick development-only non-root test, run:
 
 ```sh
-chmod 666 /dev/fb0 /dev/tty0
+chmod 666 /dev/fb0 /dev/tty0 /dev/input/event0
 ```
 
-Set `MMB4L_APPLY_DEVICE_PERMS=0` to skip that step. Set `MMB4L_RUN_SMOKE=0` to
-skip the installer's smoke test.
+Set `MMB4L_APPLY_DEVICE_PERMS=1` to have the installer apply that workaround.
+Set `MMB4L_RUN_SMOKE=0` to skip the installer's smoke test.
 
 To refresh the release bundle from the current build output:
 
@@ -104,72 +106,64 @@ tracked binary from `build/mmb4l-luckfox-release/mmbasic`. It uses
 `build/mmb4l-luckfox-source` for examples, tests, and `sptools` when available,
 matching the deploy script.
 
-## DirectFB Target Setup
+## Native Framebuffer Target Setup
 
-The PicoCalc graphics path uses SDL2 over DirectFB. The target must have the
-project DirectFB configuration installed at `/etc/directfbrc`; otherwise
-DirectFB can try to take over a virtual terminal and graphics can be less
-stable when launched from SSH/ADB or a nonstandard console.
-
-`scripts/deploy-mmbasic.ps1` installs `scripts/target/directfbrc` to
-`/etc/directfbrc` by default. If applying it manually, the file contents should
-be:
+The current PicoCalc graphics path presents the MMBasic display directly through
+Linux fbdev at `/dev/fb0`. Physical-console keyboard input is read through the
+PicoCalc evdev keyboard at `/dev/input/event0`, or the stable by-path symlink:
 
 ```text
-quiet
-no-cursor
-no-banner
-no-debug
-system=fbdev
-fbdev=/dev/fb0
-wm=default
-mode=320x320
-depth=16
-pixelformat=RGB16
-no-vt
-no-vt-switch
-no-linux-input-grab
-disable-module=keyboard
-disable-module=linux_input
+/dev/input/by-path/platform-ff040000.i2c-event-kbd
 ```
 
-`quiet` suppresses the DirectFB startup, framebuffer, gamma-ramp, and Fusion
-diagnostics that otherwise remain on the physical console after a graphics
-program exits. `no-banner` removes the large DirectFB startup banner, and
-`no-debug` is harmless on this target but does not replace `quiet`.
+DirectFB is no longer installed or required by the release bundle. The legacy
+`scripts/target/directfbrc` file remains in the repository only for testing old
+SDL/DirectFB builds explicitly.
 
-The two `disable-module` lines keep DirectFB from opening the PicoCalc keyboard
-through its own input drivers; MMBasic receives physical-console input through
-stdin instead. This avoids the bad key behavior seen when Linux console input
-and DirectFB input both consume the PicoCalc keyboard.
+Verify fbdev on the target:
 
-Manual apply command:
-
-```powershell
-adb push .\scripts\target\directfbrc /tmp/directfbrc
-adb shell 'cp /tmp/directfbrc /etc/directfbrc'
+```sh
+test -e /dev/fb0
+fbset -fb /dev/fb0
+mmbasic -e 'Print MM.Info$("GRAPHICS BACKEND")'
 ```
 
-On the tested image, non-root display access was also stabilized by allowing
-the user process to read and write both `/dev/fb0` and `/dev/tty0`.
-The observed default ownership was:
+Expected backend output:
+
+```text
+FBDEV
+```
+
+The tested image exposes the display and input devices with restrictive
+permissions:
 
 ```text
 crw-rw----    1 root     tty         4,   0 Dec 31  1969 tty0
 crw-rw----    1 root     video      29,   0 Jun 23 10:46 fb0
+crw-rw----    1 root     tty        13,  64 ... event0
 ```
 
-The proven local workaround is:
+For non-root runs, the current practical workaround is:
 
 ```powershell
-adb shell 'chmod 666 /dev/fb0 /dev/tty0'
+adb shell 'chmod 666 /dev/fb0 /dev/tty0 /dev/input/event0'
 ```
 
 This is intentionally documented as a device workaround, not a final security
-policy. It grants display/console access to every local process and may be
-reset when `/dev` is recreated at boot. A later image-level fix should prefer a
-proper user/group membership, `mdev`, or equivalent device-permission rule once
-the final Luckfox runtime policy is known.
+policy. It grants display/console/input access to every local process and may
+be reset when `/dev` is recreated at boot. A later image-level fix should
+prefer a proper user/group membership, `mdev`, or equivalent device-permission
+rule once the final Luckfox runtime policy is known.
+
+To install the legacy DirectFB config during an ADB deploy of an old
+SDL/DirectFB build, pass an explicit path:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\deploy-mmbasic.ps1 `
+  -LegacyDirectFbConfigPath /etc/directfbrc
+```
+
+That option is not used by the normal release package.
 
 ## Run Tests On PicoCalc
 
@@ -185,8 +179,8 @@ Run the full target health suite:
 mmb4l-run-tests
 ```
 
-Verify that text-mode `CLS` clears the physical console instead of blanking the
-DirectFB graphics surface:
+Verify that text-mode `CLS` clears the physical console instead of forcing a
+graphics clear:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\verify-picocalc-text-cls.ps1
@@ -197,9 +191,9 @@ under `/usr/local/share/mmb4l/tests`, including the upstream test files and the
 project PicoCalc tests under `tests/picocalc`. It also runs target health
 checks for:
 
-- required `/etc/directfbrc` options
 - read/write access to `/dev/fb0`
 - read/write access to `/dev/tty0`
+- read access to `/dev/input/event0`
 - installed PicoCalc target tests
 
 The runner exports `MMB4L_TEST_TARGET=picocalc-luckfox-lyra` so display-size
@@ -215,10 +209,10 @@ MMB4L_TEST_TIMEOUT=120 mmb4l-run-tests
 MMB4L_TEST_TIMEOUT=0 mmb4l-run-tests
 ```
 
-Cursor-position checks and DirectFB-backed simulation checks are disabled by
-default because they can corrupt the shell prompt or fail for non-root console
-users. The runner prints skip reasons for those intentionally disabled checks.
-To opt into them explicitly:
+Cursor-position checks and legacy SDL/DirectFB-backed simulation checks are
+disabled by default because they can corrupt the shell prompt or fail for
+non-root console users. The runner prints skip reasons for those intentionally
+disabled checks. To opt into them explicitly:
 
 ```sh
 MMB4L_TEST_CURSOR=1 mmb4l-run-tests tst_mminfo.bas

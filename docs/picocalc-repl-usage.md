@@ -4,9 +4,9 @@ MMBasic has one command prompt and one graphics output surface.
 
 On the Luckfox PicoCalc build, the prompt is the terminal that started
 `mmbasic`: SSH, ADB shell, an X11 terminal, or the physical Linux console.
-Graphics commands draw to the PicoCalc framebuffer. In an X11 desktop session,
-that framebuffer may appear as a separate non-resizable window named
-`PicoCalc`. That window is graphics output only; it is not the BASIC prompt.
+Graphics commands draw to the PicoCalc framebuffer. GUI/X11 desktop use is not
+the primary support target; depending on the host display stack, it may behave
+differently from the PicoCalc Linux console/text environment.
 
 ## Starting MMBasic
 
@@ -28,11 +28,9 @@ Exit the prompt:
 QUIT
 ```
 
-Interrupt a running BASIC program from the terminal with `Ctrl+C`. If keyboard
-input seems unreliable from the physical PicoCalc console, confirm that
-`/etc/directfbrc` contains the project input settings from
-[deploy.md](deploy.md). DirectFB should not grab the PicoCalc keyboard; MMBasic
-reads console input from stdin.
+Interrupt a running BASIC program from the terminal with `Ctrl+C`. On the
+physical PicoCalc console, graphics-mode input is read from the PicoCalc evdev
+keyboard, so `/dev/input/event0` must be readable by the user running MMBasic.
 
 ## Console Versus Graphics
 
@@ -80,41 +78,22 @@ PicoMite programs commonly start drawing without an explicit `GRAPHICS WINDOW`
 command. To support those programs, this build automatically creates the
 320x320 PicoCalc display surface when a graphics command needs it.
 
-The important detail is that the created `PicoCalc` window or framebuffer is
-not a terminal. If it is blank, focus or return to the shell that launched
-`mmbasic` and keep typing there.
+The important detail is that graphics output is not a second terminal. If a GUI
+environment opens a separate graphics window, focus or return to the shell that
+launched `mmbasic` and keep typing there.
 
-## Recommended DirectFB Configuration
+## Device Access
 
-The installed `/etc/directfbrc` should include:
-
-```text
-quiet
-no-cursor
-no-banner
-no-debug
-system=fbdev
-fbdev=/dev/fb0
-wm=default
-mode=320x320
-depth=16
-pixelformat=RGB16
-no-vt
-no-vt-switch
-no-linux-input-grab
-disable-module=keyboard
-disable-module=linux_input
-```
-
-The `quiet`, `no-banner`, and `no-debug` options suppress DirectFB startup
-output. The input options keep DirectFB from consuming PicoCalc keyboard events
-that should go to the terminal running MMBasic.
-
-The current installer also applies this tested device-permission workaround:
+The installer does not change device permissions by default. For a quick
+development-only non-root test:
 
 ```sh
-chmod 666 /dev/fb0 /dev/tty0
+chmod 666 /dev/fb0 /dev/tty0 /dev/input/event0
 ```
 
+Set `MMB4L_APPLY_DEVICE_PERMS=1` to have the installer apply that workaround.
 This is a practical target workaround, not a final security policy. A future
 image should replace it with proper user/group or device-manager rules.
+
+The old SDL/DirectFB setup is now a legacy test path. Normal PicoCalc releases
+use the native fbdev display presenter and evdev keyboard backend.

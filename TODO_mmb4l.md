@@ -13,45 +13,43 @@ CSUB baseline, REST client, checker, and target test runner now exist.
   `patches/mmb4l/`.
 - A prebuilt ARMv7 binary and install-ready release bundles are in `dist/`.
 - The release bundle includes `mmbasic`, `mmb4l-run-tests`,
-  `mmb4l-check-basic`, DirectFB config, examples, tests, and checksums.
+  `mmb4l-check-basic`, examples, tests, and checksums.
 - The supported runtime target is the Luckfox PicoCalc Linux console/text
-  environment using the PicoCalc framebuffer. GUI/X11 use is not the primary
-  support target and may vary by display stack and input handling.
+  environment using native `/dev/fb0` graphics and evdev keyboard input.
+  GUI/X11 use is not the primary support target and may vary by display stack
+  and input handling.
 
 ## Recommended Work Order
 
-1. Finish PicoCalc input reliability.
-2. Continue graphics polish using real BASIC programs and visual regression
+1. Continue graphics polish using real BASIC programs and visual regression
    tests.
-3. Use the VM-MMBasic tree as reference material for HAL cleanup, framebuffer
+2. Use the VM-MMBasic tree as reference material for HAL cleanup, framebuffer
    design, shared graphics tests, networking organization, PicoCalc hardware
    protocol notes, and checker coverage.
-4. Add real audio support or document the final no-audio compatibility policy.
-5. Implement the inbound WebMite-style HTTP/TCP server surface.
-6. Create the PicoCalc pin and bus safety map.
-7. Add safe Linux-backed GPIO, I2C, and SPI only after the pin map is complete.
-8. Continue selected PicoMite/WebMite V6 language compatibility work.
+3. Add real audio support or document the final no-audio compatibility policy.
+4. Implement the inbound WebMite-style HTTP/TCP server surface.
+5. Create the PicoCalc pin and bus safety map.
+6. Add safe Linux-backed GPIO, I2C, and SPI only after the pin map is complete.
+7. Continue selected PicoMite/WebMite V6 language compatibility work.
 
 ## Priority 1: PicoCalc Input
 
-- Add or improve direct evdev input from `/dev/input/event0` or
-  `/dev/input/by-path/platform-ff040000.i2c-event-kbd`.
-- Map PicoCalc keyboard keys into MMBasic key codes.
-- Make graphics-mode `INKEY$`, break handling, arrows, function keys,
-  backspace/delete, and enter reliable from the physical PicoCalc console.
-- Keep normal terminal input working for SSH and ADB.
-- Add a timeout-based target test that logs observed key codes without hanging.
+- Direct evdev input from `/dev/input/event0` or
+  `/dev/input/by-path/platform-ff040000.i2c-event-kbd` is implemented.
+- PicoCalc keys are mapped into MMBasic key codes for physical-console
+  graphics-mode input.
+- Normal terminal input remains the path for SSH and ADB.
+- Continue improving key coverage only when a real program exposes a missing
+  key or modifier case.
 
 ## Priority 2: Graphics Polish
 
 - Keep testing real BASIC programs for `CLS`, `TEXT`, `PRINT @`, sprites,
   framebuffer pages, images, and mixed text/graphics behavior.
 - Add more visual regression tests and screenshots for known-good demos.
-- Decide whether SDL2/DirectFB remains the long-term display backend.
-- Add a native `/dev/fb0` RGB565 backend only if SDL2/DirectFB blocks
-  reliability, performance, or console ownership.
+- Native `/dev/fb0` RGB565 presentation is now the release path.
 - Review VM-MMBasic's `host_fb` framebuffer model as the preferred reference
-  if a native `/dev/fb0` backend is added.
+  for further cleanup of the native display code.
 - Mine VM-MMBasic shared graphics tests and code organization for framebuffer,
   tilemap, and RGB regression coverage.
 - Keep documenting that GUI/X11 is not the primary supported target.
@@ -63,8 +61,8 @@ useful reference material. Pull ideas selectively without making the Luckfox
 release depend on a second interpreter tree.
 
 - Use its HAL design as the model for cleaning up MMB4L platform code.
-- Use its `host_fb` framebuffer model as a cleaner alternative if DirectFB
-  becomes a long-term reliability, performance, or console-ownership problem.
+- Use its `host_fb` framebuffer model as the cleanup target for the native
+  `/dev/fb0` release path.
 - Reuse ideas from its shared graphics code and tests, especially framebuffer,
   tilemap, and RGB behavior.
 - Use its `shared/net` command organization as reference for the inbound

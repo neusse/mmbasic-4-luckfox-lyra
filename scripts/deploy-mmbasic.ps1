@@ -2,7 +2,7 @@ param(
   [string]$InstallBinDir = '/usr/local/bin',
   [string]$PathBinDir = '/usr/bin',
   [string]$InstallShareDir = '/usr/local/share/mmb4l',
-  [string]$DirectFbConfigPath = '/etc/directfbrc',
+  [string]$LegacyDirectFbConfigPath = '',
   [string]$RemoteStage = '/tmp/mmb4l-deploy',
   [switch]$SkipSmoke
 )
@@ -21,10 +21,14 @@ $targetRunner = Join-Path $repoRoot 'scripts\target\mmb4l-run-tests.sh'
 $compatChecker = Join-Path $repoRoot 'tools\mmb4l_check_basic.py'
 $directFbConfig = Join-Path $repoRoot 'scripts\target\directfbrc'
 
-foreach ($path in @($binary, $examplesDir, $testsDir, $sptoolsDir, $picocalcTestsDir, $targetRunner, $compatChecker, $directFbConfig)) {
+foreach ($path in @($binary, $examplesDir, $testsDir, $sptoolsDir, $picocalcTestsDir, $targetRunner, $compatChecker)) {
   if (-not (Test-Path -LiteralPath $path)) {
     throw "Required path not found: $path"
   }
+}
+
+if ($LegacyDirectFbConfigPath -and -not (Test-Path -LiteralPath $directFbConfig)) {
+  throw "Required path not found: $directFbConfig"
 }
 
 $adb = Get-Command adb -ErrorAction SilentlyContinue
@@ -50,10 +54,9 @@ stage='$RemoteStage'
 bin_dir='$InstallBinDir'
 path_bin_dir='$PathBinDir'
 share_dir='$InstallShareDir'
-directfb_config_path='$DirectFbConfigPath'
+legacy_directfb_config_path='$LegacyDirectFbConfigPath'
 
 test -f "`$stage/mmbasic"
-test -f "`$stage/directfbrc"
 test -d "`$stage/share/examples"
 test -d "`$stage/share/tests"
 test -d "`$stage/share/picocalc-tests"
@@ -72,9 +75,10 @@ mkdir -p "`$share_dir/tests/picocalc"
 cp "`$stage/share/picocalc-tests"/*.bas "`$share_dir/tests/picocalc/"
 cp -R "`$stage/share/sptools" "`$share_dir/sptools"
 cp "`$stage/mmb4l-run-tests.sh" "`$bin_dir/mmb4l-run-tests"
-if [ -n "`$directfb_config_path" ]; then
-  mkdir -p "`$(dirname "`$directfb_config_path")"
-  cp "`$stage/directfbrc" "`$directfb_config_path"
+if [ -n "`$legacy_directfb_config_path" ]; then
+  test -f "`$stage/directfbrc"
+  mkdir -p "`$(dirname "`$legacy_directfb_config_path")"
+  cp "`$stage/directfbrc" "`$legacy_directfb_config_path"
 fi
 
 chmod 755 "`$bin_dir/mmbasic" "`$bin_dir/mmb4l-run-tests" "`$bin_dir/mmb4l-check-basic"
@@ -97,7 +101,9 @@ try {
   Invoke-Adb push $binary "$RemoteStage/mmbasic"
   Invoke-Adb push $targetRunner "$RemoteStage/mmb4l-run-tests.sh"
   Invoke-Adb push $compatChecker "$RemoteStage/mmb4l-check-basic"
-  Invoke-Adb push $directFbConfig "$RemoteStage/directfbrc"
+  if ($LegacyDirectFbConfigPath) {
+    Invoke-Adb push $directFbConfig "$RemoteStage/directfbrc"
+  }
   Invoke-Adb push $tempInstall "$RemoteStage/install.sh"
   Invoke-Adb push $examplesDir "$RemoteStage/share/"
   Invoke-Adb push $testsDir "$RemoteStage/share/"
@@ -118,8 +124,8 @@ try {
   Write-Output "Installed examples/tests/sptools to $InstallShareDir"
   Write-Output "Installed test runner to $InstallBinDir/mmb4l-run-tests"
   Write-Output "Installed compatibility checker to $InstallBinDir/mmb4l-check-basic"
-  if ($DirectFbConfigPath) {
-    Write-Output "Installed DirectFB config to $DirectFbConfigPath"
+  if ($LegacyDirectFbConfigPath) {
+    Write-Output "Installed legacy DirectFB config to $LegacyDirectFbConfigPath"
   }
 } finally {
   Remove-Item -LiteralPath $tempInstall -Force -ErrorAction SilentlyContinue

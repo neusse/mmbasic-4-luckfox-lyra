@@ -56,7 +56,7 @@
       <rect x="276" y="0" width="104" height="34" rx="17" fill="#fef3c7"/>
       <text x="299" y="23" fill="#92400e">MMB4L</text>
       <rect x="398" y="0" width="124" height="34" rx="17" fill="#dcfce7"/>
-      <text x="423" y="23" fill="#166534">DirectFB</text>
+      <text x="423" y="23" fill="#166534">fbdev</text>
     </g>
   </g>
 </svg>

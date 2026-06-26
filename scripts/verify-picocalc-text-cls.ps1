@@ -31,7 +31,7 @@ PRINT "CLS TEXT MODE"
 PAUSE 3000
 BASIC
 rm -f '$remotePng' '$remoteLog' '$remoteRc' '$remoteShotLog'
-export SDL_VIDEODRIVER=directfb
+export MMB4L_PICOCALC_CONSOLE=screen
 (mmbasic '$remoteBasic' < /dev/tty0 > /dev/tty0 2> '$remoteLog'; echo `$? > '$remoteRc') &
 pid=`$!
 sleep 1

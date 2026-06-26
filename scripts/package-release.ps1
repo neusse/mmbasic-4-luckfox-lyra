@@ -16,9 +16,9 @@ $submoduleRoot = Join-Path $repoRoot 'mmb4l'
 $targetRunner = Join-Path $repoRoot 'scripts\target\mmb4l-run-tests.sh'
 $compatChecker = Join-Path $repoRoot 'tools\mmb4l_check_basic.py'
 $targetInstaller = Join-Path $repoRoot 'scripts\target\install-picocalc.sh'
-$directFbConfig = Join-Path $repoRoot 'scripts\target\directfbrc'
 $picocalcTests = Join-Path $repoRoot 'tests\picocalc'
 $replUsageDoc = Join-Path $repoRoot 'docs\picocalc-repl-usage.md'
+$fbdevVerifyScript = Join-Path $repoRoot 'scripts\verify-picocalc-fbdev.ps1'
 
 if (-not (Test-Path -LiteralPath $sourceRoot -PathType Container)) {
   $sourceRoot = $submoduleRoot
@@ -28,7 +28,7 @@ $examplesDir = Join-Path $sourceRoot 'examples'
 $testsDir = Join-Path $sourceRoot 'tests'
 $sptoolsDir = Join-Path $sourceRoot 'sptools'
 
-foreach ($path in @($sourceRoot, $examplesDir, $testsDir, $sptoolsDir, $targetRunner, $compatChecker, $targetInstaller, $directFbConfig, $picocalcTests, $replUsageDoc)) {
+foreach ($path in @($sourceRoot, $examplesDir, $testsDir, $sptoolsDir, $targetRunner, $compatChecker, $targetInstaller, $picocalcTests, $replUsageDoc, $fbdevVerifyScript)) {
   if (-not (Test-Path -LiteralPath $path)) {
     throw "Required release input not found: $path"
   }
@@ -65,16 +65,16 @@ function Get-Sha256Lower {
 try {
   New-Item -ItemType Directory -Force -Path `
     (Join-Path $bundleRoot 'bin'), `
-    (Join-Path $bundleRoot 'etc'), `
     (Join-Path $bundleRoot 'docs'), `
+    (Join-Path $bundleRoot 'scripts'), `
     (Join-Path $bundleRoot 'share') | Out-Null
 
   Copy-Item -LiteralPath $standaloneBinary -Destination (Join-Path $bundleRoot 'bin\mmbasic') -Force
   Copy-Item -LiteralPath $targetRunner -Destination (Join-Path $bundleRoot 'bin\mmb4l-run-tests') -Force
   Copy-Item -LiteralPath $compatChecker -Destination (Join-Path $bundleRoot 'bin\mmb4l-check-basic') -Force
   Copy-Item -LiteralPath $targetInstaller -Destination (Join-Path $bundleRoot 'install-picocalc.sh') -Force
-  Copy-Item -LiteralPath $directFbConfig -Destination (Join-Path $bundleRoot 'etc\directfbrc') -Force
   Copy-Item -LiteralPath $replUsageDoc -Destination (Join-Path $bundleRoot 'docs\picocalc-repl-usage.md') -Force
+  Copy-Item -LiteralPath $fbdevVerifyScript -Destination (Join-Path $bundleRoot 'scripts\verify-picocalc-fbdev.ps1') -Force
 
   Copy-DirectoryFresh -Source $examplesDir -Destination (Join-Path $bundleRoot 'share\examples')
   Copy-DirectoryFresh -Source $testsDir -Destination (Join-Path $bundleRoot 'share\tests')
@@ -100,17 +100,19 @@ The installer writes:
 - `/usr/local/bin/mmb4l-run-tests`
 - `/usr/local/bin/mmb4l-check-basic`
 - `/usr/local/share/mmb4l`
-- `/etc/directfbrc`
-- `/usr/bin/mmbasic` and `/usr/bin/mmb4l-run-tests` symlinks
+- `/usr/bin/mmbasic`, `/usr/bin/mmb4l-run-tests`, and
+  `/usr/bin/mmb4l-check-basic` symlinks
 
-By default it also applies the proven PicoCalc display workaround:
+The installer does not change device permissions by default. If running as a
+non-root user, verify access to `/dev/fb0`, `/dev/tty0`, and
+`/dev/input/event0`. For a quick development-only test:
 
 ```sh
-chmod 666 /dev/fb0 /dev/tty0
+chmod 666 /dev/fb0 /dev/tty0 /dev/input/event0
 ```
 
-Set `MMB4L_APPLY_DEVICE_PERMS=0` to skip that step. Set `MMB4L_RUN_SMOKE=0` to
-skip the smoke test at the end of installation.
+Set `MMB4L_APPLY_DEVICE_PERMS=1` to have the installer apply that workaround.
+Set `MMB4L_RUN_SMOKE=0` to skip the smoke test at the end of installation.
 
 The test runner uses a 60 second timeout per BASIC test file. Set
 `MMB4L_TEST_TIMEOUT=120` to allow slower tests, or `MMB4L_TEST_TIMEOUT=0` to
@@ -137,7 +139,7 @@ Interactive use and graphics behavior are documented in
     "$(Get-Sha256Lower (Join-Path $bundleRoot 'bin\mmbasic'))  bin/mmbasic"
     "$(Get-Sha256Lower (Join-Path $bundleRoot 'bin\mmb4l-run-tests'))  bin/mmb4l-run-tests"
     "$(Get-Sha256Lower (Join-Path $bundleRoot 'bin\mmb4l-check-basic'))  bin/mmb4l-check-basic"
-    "$(Get-Sha256Lower (Join-Path $bundleRoot 'etc\directfbrc'))  etc/directfbrc"
+    "$(Get-Sha256Lower (Join-Path $bundleRoot 'scripts\verify-picocalc-fbdev.ps1'))  scripts/verify-picocalc-fbdev.ps1"
     "$(Get-Sha256Lower (Join-Path $bundleRoot 'install-picocalc.sh'))  install-picocalc.sh"
   )
   [System.IO.File]::WriteAllText((Join-Path $bundleRoot 'SHA256SUMS'), (($bundleHashLines -join "`n") + "`n"))

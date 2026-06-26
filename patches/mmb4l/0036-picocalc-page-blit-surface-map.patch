@@ -1,0 +1,226 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Codex <codex@example.com>
+Date: Fri, 26 Jun 2026 00:00:00 -0700
+Subject: [PATCH] Map PicoCalc page and blit ids away from fbdev surfaces
+
+The native fbdev path reserves internal surfaces 1, 2, and 3 for framebuffer
+N/F/L. Existing PicoCalc compatibility tests still expect BASIC `PAGE 1` and
+`BLIT READ 1` to be independent user-visible objects. After the fbdev switch,
+those numeric IDs collided with the visible framebuffer surface.
+
+Add a PicoCalc-only page mapping where BASIC page 0 is the visible N surface
+and BASIC page 1..60 live in internal surfaces 4..63. Also map PicoCalc BLIT
+IDs into the existing CMM2-style blit range 64..127. PAGE commands now parse
+page IDs directly instead of forwarding to GRAPHICS raw-surface commands.
+---
+diff --git a/src/commands/cmd_blit.c b/src/commands/cmd_blit.c
+index 30d42e2..6b87c24 100644
+--- a/src/commands/cmd_blit.c
++++ b/src/commands/cmd_blit.c
+@@ -69,11 +69,12 @@ static MmResult cmd_blit_close(const char *p) {
+ static MmResult cmd_blit_close_all(const char *p) {
+     skipspace(p);
+     if (!parse_is_end(p)) return kUnexpectedText;
++    const bool picocalc = graphics_is_default_display_picocalc();
+     MmResult result = kOk;
+-    const MmSurfaceId start_id = (mmb_options.simulate == kSimulateMmb4l)
++    const MmSurfaceId start_id = (mmb_options.simulate == kSimulateMmb4l && !picocalc)
+             ? 0
+             : CMM2_BLIT_BASE + 1; // 64
+-    const MmSurfaceId end_id = (mmb_options.simulate == kSimulateMmb4l)
++    const MmSurfaceId end_id = (mmb_options.simulate == kSimulateMmb4l && !picocalc)
+             ? GRAPHICS_MAX_ID
+             : CMM2_BLIT_BASE + CMM2_BLIT_COUNT; // 127
+     for (MmSurfaceId surface_id = start_id; surface_id <= end_id; ++surface_id) {
+diff --git a/src/commands/cmd_page.c b/src/commands/cmd_page.c
+index 0b19eeb..91e3a9f 100644
+--- a/src/commands/cmd_page.c
++++ b/src/commands/cmd_page.c
+@@ -43,18 +43,65 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *******************************************************************************/
+ 
+ #include <stdio.h>
++#include <ctype.h>
+ 
+ #include "../common/mmb4l.h"
+ #include "../common/error.h"
+ #include "../common/graphics.h"
++#include "../common/parse.h"
+ #include "../common/utility.h"
+-
+-MmResult cmd_graphics_copy(const char *p);
+-MmResult cmd_graphics_write(const char *p);
++#include "../core/tokentbl.h"
+ 
+ /** PAGE COPY src_id TO dst_id [, when] [, transparent] */
+-static inline MmResult cmd_page_copy(const char *p) {
+-    return cmd_graphics_copy(p);
++static MmResult cmd_page_copy(const char *p) {
++    char ss[3];
++    ss[0] = tokenTO;
++    ss[1] = ',';
++    ss[2] = 0;
++    getargs(&p, 7, ss);
++    if (argc < 3 || !(argc % 2)) return kArgumentCount;
++
++    MmSurfaceId src_id = -1;
++    MmResult result = parse_read_page(argv[0], &src_id);
++    if (FAILED(result)) return result;
++    MmSurface *src_surface = &graphics_surfaces[src_id];
++
++    MmSurfaceId dst_id = -1;
++    result = parse_write_page(argv[2], &dst_id);
++    if (FAILED(result)) return result;
++    MmSurface *dst_surface = &graphics_surfaces[dst_id];
++
++    if (has_arg(4)) {
++        const char *arg = argv[4];
++        switch (toupper(*arg)) {
++            case 'I':
++            case 'B':
++            case 'D':
++                break;
++            default:
++                return kSyntax;
++        }
++    }
++
++    MmGraphicsColour transparent = -1;
++    if (has_arg(6)) {
++        const char *arg = argv[6];
++        if (toupper(*arg) == 'T' || *arg == '1') transparent = RGB_BLACK;
++    }
++
++    return graphics_copy(src_surface, dst_surface, transparent);
++}
++
++/** PAGE WRITE { id | NONE } */
++static MmResult cmd_page_write(const char *p) {
++    getargs(&p, 1, ",");
++    if (argc != 1) return kArgumentCount;
++    if (checkstring(argv[0], "NONE")) return graphics_surface_write(GRAPHICS_NONE);
++
++    MmSurfaceId page_id = -1;
++    MmResult result = parse_write_page(argv[0], &page_id);
++    if (SUCCEEDED(result)) result = graphics_surface_write(page_id);
++    return result;
+ }
+ 
+ /** PAGE DISPLAY n [, page] */
+@@ -117,9 +164,11 @@ static MmResult cmd_page_ensure_picocalc_pages(void) {
+ 
+     ON_FAILURE_RETURN(graphics_ensure_default_display());
+ 
+-    if (!graphics_surface_exists(1)) {
+-        MmSurface *display = &graphics_surfaces[0];
+-        ON_FAILURE_RETURN(graphics_buffer_create(1, display->width, display->height));
++    MmSurfaceId page_id = -1;
++    ON_FAILURE_RETURN(graphics_picocalc_page_to_surface_id(1, &page_id));
++    if (!graphics_surface_exists(page_id)) {
++        MmSurface *display = &graphics_surfaces[GRAPHICS_SURFACE_N];
++        ON_FAILURE_RETURN(graphics_buffer_create(page_id, display->width, display->height));
+     }
+ 
+     return kOk;
+@@ -134,7 +183,7 @@ void cmd_page(void) {
+     MmResult result = kOk;
+     const char *p;
+     if ((p = checkstring(cmdline, "WRITE"))) {
+-        result = cmd_graphics_write(p);
++        result = cmd_page_write(p);
+     } else if ((p = checkstring(cmdline, "COPY"))) {
+         result = cmd_page_copy(p);
+     } else if ((p = checkstring(cmdline, "DISPLAY"))) {
+diff --git a/src/common/graphics.c b/src/common/graphics.c
+index 7f18f74..555aa20 100644
+--- a/src/common/graphics.c
++++ b/src/common/graphics.c
+@@ -249,6 +249,20 @@ bool graphics_is_default_display_picocalc() {
+     return graphics_default_display_is_picocalc;
+ }
+ 
++MmResult graphics_picocalc_page_to_surface_id(MmSurfaceId page_id, MmSurfaceId *surface_id) {
++    if (!surface_id) return kInternalFault;
++
++    if (page_id == 0) {
++        *surface_id = GRAPHICS_SURFACE_N;
++        return kOk;
++    }
++    if (page_id >= 1 && page_id <= PICOCALC_PAGE_MAX) {
++        *surface_id = PICOCALC_PAGE_BASE + page_id - 1;
++        return kOk;
++    }
++    return kGraphicsInvalidSurface;
++}
++
+ MmResult graphics_ensure_default_display() {
+     if (graphics_current) return kOk;
+ 
+diff --git a/src/common/graphics.h b/src/common/graphics.h
+index 8a6a4fd..d33e33c 100644
+--- a/src/common/graphics.h
++++ b/src/common/graphics.h
+@@ -103,6 +103,9 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ #define CMM2_BLIT_BASE   63
+ #define CMM2_BLIT_COUNT  64
+ 
++#define PICOCALC_PAGE_BASE  (GRAPHICS_SURFACE_L + 1)
++#define PICOCALC_PAGE_MAX   (CMM2_BLIT_BASE - PICOCALC_PAGE_BASE + 1)
++
+ #define CMM2_SPRITE_BASE  127
+ #define CMM2_SPRITE_COUNT  64
+ 
+@@ -236,6 +239,10 @@ MmResult graphics_ensure_default_display();
+ /** Returns true when the default display probe has identified the Luckfox PicoCalc framebuffer. */
+ bool graphics_is_default_display_picocalc();
+ 
++/** Maps a PicoCalc BASIC page number to its internal graphics surface id. */
++MmResult graphics_picocalc_page_to_surface_id(MmSurfaceId page_id,
++                                              MmSurfaceId *surface_id);
++
+ /** Sets the PicoCalc graphics cursor used by PRINT @(x,y). */
+ bool graphics_console_set_cursor(int x, int y);
+ 
+diff --git a/src/common/parse.c b/src/common/parse.c
+index 96bb81b..3e4db32 100644
+--- a/src/common/parse.c
++++ b/src/common/parse.c
+@@ -638,15 +638,20 @@ static inline MmResult parse_picomite_page(const char *p, MmSurfaceId *page_id)
+ 
+ MmResult parse_page(const char *p, MmSurfaceId *page_id) {
+     MmResult result = kOk;
+-    switch (mmb_options.simulate) {
+-        case kSimulateGameMite:
+-        case kSimulatePicoMiteVga:
+-            result = parse_picomite_page(p, page_id);
+-            break;
+-        default:
+-            *page_id = getint(p, 0, GRAPHICS_MAX_ID);
+-            result = kOk;
+-            break;
++    if (mmb_options.simulate == kSimulateMmb4l && graphics_is_default_display_picocalc()) {
++        MmSurfaceId basic_page_id = getint(p, 0, PICOCALC_PAGE_MAX);
++        result = graphics_picocalc_page_to_surface_id(basic_page_id, page_id);
++    } else {
++        switch (mmb_options.simulate) {
++            case kSimulateGameMite:
++            case kSimulatePicoMiteVga:
++                result = parse_picomite_page(p, page_id);
++                break;
++            default:
++                *page_id = getint(p, 0, GRAPHICS_MAX_ID);
++                result = kOk;
++                break;
++        }
+     }
+     if (SUCCEEDED(result) && !graphics_surface_exists(*page_id)) {
+         return kGraphicsInvalidSurface;
+@@ -669,7 +674,7 @@ MmResult parse_blit_id(const char *p, bool existing, MmSurfaceId *blit_id) {
+     skipspace(p);
+     if (*p == '#') p++;
+     if (!*p) return kSyntax;
+-    if (mmb_options.simulate == kSimulateMmb4l) {
++    if (mmb_options.simulate == kSimulateMmb4l && !graphics_is_default_display_picocalc()) {
+         *blit_id = getint(p, 0, GRAPHICS_MAX_ID);
+     } else {
+         *blit_id = getint(p, 1, CMM2_BLIT_COUNT) + CMM2_BLIT_BASE;

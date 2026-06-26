@@ -12,9 +12,9 @@ The initial bring-up is complete:
 - Luckfox/PicoCalc changes are applied as patches from `patches/mmb4l/`.
 - The ARMv7 hard-float build runs on the Luckfox PicoCalc.
 - The release bundle includes a compiled `mmbasic`, installer, tests,
-  `mmb4l-run-tests`, `mmb4l-check-basic`, DirectFB config, and checksums.
-- SDL2/DirectFB graphics work on the PicoCalc framebuffer for the current
-  supported console/text-mode target.
+  `mmb4l-run-tests`, `mmb4l-check-basic`, and checksums.
+- Native `/dev/fb0` graphics and evdev keyboard input work on the PicoCalc
+  framebuffer for the current supported console/text-mode target.
 - CSUB execution and `MM.INFO(CALLTABLE)` work for the current ARM Luckfox
   build, with documented call-table limitations.
 - Linux-owned WiFi status, WiFi scan, read-only `OPTION WIFI`, no-op
@@ -25,7 +25,8 @@ The initial bring-up is complete:
 The supported target is the Luckfox Lyra PicoCalc running in normal Linux
 console/text mode, or launched over SSH/ADB while using the PicoCalc
 framebuffer. GUI/X11 desktop use is not the primary support path and may vary
-by framebuffer ownership, DirectFB behavior, keyboard routing, and permissions.
+by framebuffer ownership, GUI display behavior, keyboard routing, and
+permissions.
 
 Linux owns WiFi association, DHCP, routing, TLS certificates, and system time.
 MMBasic should inspect network state and provide program network IO, but it
@@ -37,12 +38,12 @@ Goal: make PicoCalc keyboard behavior reliable in graphics and console use.
 
 Tasks:
 
-- Add or improve direct evdev input from `/dev/input/event0` or the stable
-  by-path keyboard device.
-- Map arrows, function keys, escape, enter, backspace/delete, modifiers, and
-  break behavior into MMBasic consistently.
-- Preserve normal terminal input for SSH and ADB sessions.
-- Add a target smoke test that can inspect key delivery without hanging.
+- Direct evdev input from `/dev/input/event0` and the stable by-path keyboard
+  device is implemented.
+- Arrows, function keys, escape, enter, backspace/delete, modifiers, and break
+  behavior are mapped through the PicoCalc evdev backend.
+- Normal terminal input is preserved for SSH and ADB sessions.
+- Continue adding key-specific tests as real programs expose gaps.
 
 ## Milestone 2: Graphics Completion And Regression Coverage
 
@@ -53,12 +54,9 @@ Tasks:
 - Continue testing real programs that mix `CLS`, `PRINT`, `PRINT @`, `TEXT`,
   sprites, pages, framebuffer commands, and images.
 - Add visual regression programs and captured expected screenshots where useful.
-- Keep the DirectFB setup documented and packaged.
-- Decide whether SDL2/DirectFB remains the long-term backend or whether a
-  native `/dev/fb0` RGB565 backend is justified.
-- If native `/dev/fb0` work becomes necessary, use VM-MMBasic's host
-  framebuffer model as reference for separating the logical drawing surface
-  from the Linux display flush path.
+- Keep native fbdev presentation covered by target tests and install checks.
+- Use VM-MMBasic's host framebuffer model as reference for further separating
+  the logical drawing surface from the Linux display flush path.
 - Mine VM-MMBasic shared graphics code and tests for framebuffer, tilemap, and
   RGB regression cases that should also pass on the Luckfox PicoCalc build.
 
@@ -70,7 +68,8 @@ without replacing the current MMB4L-based release.
 Tasks:
 
 - Use its HAL design as the preferred model for future MMB4L platform cleanup.
-- Use its `host_fb` framebuffer model if DirectFB becomes a blocker.
+- Use its `host_fb` framebuffer model to clean up the native fbdev display
+  presenter.
 - Use its shared graphics tests and organization for framebuffer, tilemap, and
   RGB validation ideas.
 - Use its `shared/net` organization as reference for the inbound WebMite-style

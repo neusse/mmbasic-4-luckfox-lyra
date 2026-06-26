@@ -26,25 +26,16 @@ userland compiler, `arm-buildroot-linux-gnueabihf-gcc`.
   - `/dev/tty0`: `crw-rw---- root tty`
   - `/dev/fb0`: `crw-rw---- root video`
 
-Stock MMB4L uses SDL2. The current Luckfox/PicoCalc build uses SDL2 with
-DirectFB for the framebuffer path. If SDL/DirectFB becomes a reliability or
-performance blocker, a native framebuffer backend can be added later.
+Stock MMB4L uses SDL2. The current Luckfox/PicoCalc release path uses a native
+PicoCalc framebuffer presenter: MMBasic draws into a software RGB565 surface and
+flushes changed rows to `/dev/fb0`. DirectFB is retained only as an explicit
+legacy SDL test path.
 
-For the current SDL2/DirectFB path, `/etc/directfbrc` should match
-`scripts/target/directfbrc`. The important target-specific settings are
-`quiet`, `system=fbdev`, `fbdev=/dev/fb0`, `mode=320x320`,
-`pixelformat=RGB16`, `no-vt`, `no-vt-switch`, `disable-module=keyboard`, and
-`disable-module=linux_input`.
-
-`quiet` suppresses DirectFB backend logs on the physical console. Without it,
-DirectFB startup, framebuffer, gamma-ramp, and Fusion diagnostics can remain on
-screen after a graphics program exits.
-
-For non-root runs, changing `/dev/fb0` and `/dev/tty0` to mode `666` has been
-observed to avoid display permission errors and improve graphics stability:
+For non-root runs, changing `/dev/fb0`, `/dev/tty0`, and `/dev/input/event0` to
+mode `666` has been observed to avoid display/input permission errors:
 
 ```sh
-chmod 666 /dev/fb0 /dev/tty0
+chmod 666 /dev/fb0 /dev/tty0 /dev/input/event0
 ```
 
 This is a broad local workaround. A persistent image-level fix should use a
@@ -57,9 +48,8 @@ defined.
 - Name: `Picocalc Keyboard`
 - Stable path observed: `/dev/input/by-path/platform-ff040000.i2c-event-kbd`
 
-Normal terminal input works for SSH/ADB style use. Direct evdev input remains
-the recommended next step for reliable physical-console graphics-mode keyboard
-handling.
+Normal terminal input works for SSH/ADB style use. Direct evdev input is the
+physical-console graphics-mode keyboard path.
 
 ## Audio
 
@@ -87,7 +77,7 @@ commands expose hardware access.
 adb devices -l
 adb shell 'cat /etc/os-release; uname -a'
 adb shell 'cat /proc/fb; fbset -fb /dev/fb0'
-adb shell 'cat /etc/directfbrc; ls -l /dev/tty0 /dev/fb0'
+adb shell 'ls -l /dev/tty0 /dev/fb0 /dev/input/event0 /dev/input/by-path/platform-ff040000.i2c-event-kbd'
 adb shell 'cat /proc/bus/input/devices'
 adb shell 'cat /proc/asound/cards; ls -l /dev/snd'
 adb shell 'ls -l /dev/gpiochip* /dev/i2c* /dev/spidev* 2>/dev/null'

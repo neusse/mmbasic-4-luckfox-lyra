@@ -106,7 +106,8 @@ Current graphics status:
 - PicoCalc auto-display works for `MM.HRES`, `MM.VRES`, `PIXEL`, `PIXEL(`, `LINE`, `BOX`, `TEXT`, `CLS RGB(...)`, `ARC`, `CIRCLE`, `RBOX`, `TRIANGLE`, `POLYGON`, default `BLIT`, `BLIT READ`, `BLIT WRITE`, `BLIT MEMORY`, `BLIT COMPRESSED`, `LOAD BMP`, `LOAD IMAGE`, `LOAD PNG`, `SAVE IMAGE`, `IMAGE RESIZE`, `IMAGE RESIZE FAST`, `IMAGE ROTATE`, `IMAGE ROTATE FAST`, and basic `SPRITE LOAD` / `SPRITE READ` / `SPRITE SHOW` / `SPRITE NEXT` / `SPRITE MOVE` / `SPRITE HIDE` / `SPRITE MEMORY` / `SPRITE COMPRESSED`.
 - Explicit `GRAPHICS WINDOW 0, 320, 320, ... , 1` on PicoCalc should use the full 320x320 framebuffer instead of the desktop 85% fit rule. The window path now probes the PicoCalc framebuffer, uses scale 1, positions exact framebuffer windows at `(0,0)` when x/y are omitted, and asks SDL for a borderless window.
 - `IMAGE WARP_H` and `IMAGE WARP_V` are deferred because they were not found in the loaded PicoMite V6 manual text or extracted PicoMite command lists.
-- DirectFB VT takeover/disallocation warnings are avoided by installing `scripts/target/directfbrc` to `/etc/directfbrc` with `no-vt` and `no-vt-switch`. The DirectFB deinitialization warning is fixed by calling `graphics_term()` and `events_term()` on the non-interactive interpreter exit path. DirectFB still emits gamma-ramp and `fusion_*` backend messages on this platform.
+- Native fbdev presentation is the release path: MMBasic draws into a software RGB565 surface and flushes to `/dev/fb0`. The old SDL/DirectFB path remains only for explicit legacy tests.
+- Physical-console graphics-mode keyboard input is handled through the PicoCalc evdev keyboard at `/dev/input/event0`; SSH/ADB terminal sessions continue to use stdin.
 
 ## CSUB Status
 

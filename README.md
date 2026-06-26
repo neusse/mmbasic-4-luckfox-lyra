@@ -13,7 +13,8 @@
   <code>Luckfox Lyra</code>
   <code>PicoCalc</code>
   <code>MMB4L</code>
-  <code>DirectFB</code>
+  <code>fbdev</code>
+  <code>evdev</code>
 </p>
 
 This repository is a repeatable build and documentation workspace for running
@@ -39,10 +40,9 @@ people, not just for one local machine.
   glibc 2.38, framebuffer `/dev/fb0`, evdev keyboard input, and ALSA audio.
 - The ARMv7 hard-float `mmbasic` build runs on the Luckfox PicoCalc.
 - The current release bundle includes the compiled binary, install script,
-  DirectFB configuration, target tests, `mmb4l-run-tests`, `mmb4l-check-basic`,
-  and checksums.
-- SDL2/DirectFB graphics work on the PicoCalc framebuffer for the supported
-  console/text-mode target.
+  target tests, `mmb4l-run-tests`, `mmb4l-check-basic`, and checksums.
+- Native `/dev/fb0` graphics and `/dev/input/event0` keyboard input work on the
+  PicoCalc framebuffer for the supported console/text-mode target.
 - CSUB execution, `MM.INFO(CALLTABLE)`, framebuffer/page graphics, many
   PicoMite-style compatibility commands, and outbound HTTP/HTTPS REST calls are
   implemented.
@@ -159,10 +159,11 @@ sh install-picocalc.sh
 mmb4l-run-tests
 ```
 
-The bundle includes `mmbasic`, `mmb4l-run-tests`, examples, upstream tests,
-PicoCalc target tests, `sptools`, and the proven `/etc/directfbrc`
-configuration. It also applies the current `/dev/fb0` and `/dev/tty0`
-permission workaround unless `MMB4L_APPLY_DEVICE_PERMS=0` is set.
+The bundle includes `mmbasic`, `mmb4l-run-tests`, `mmb4l-check-basic`,
+examples, upstream tests, PicoCalc target tests, and `sptools`. It does not
+change device permissions by default; set `MMB4L_APPLY_DEVICE_PERMS=1` for the
+development-only `/dev/fb0`, `/dev/tty0`, and `/dev/input/event0` permission
+workaround.
 
 Smoke test on the connected PicoCalc:
 

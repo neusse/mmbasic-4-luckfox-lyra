@@ -192,7 +192,7 @@ run_tests.bas
     echo "Skip reason: tst_mminfo.test_hpos/test_vpos require MMB4L_TEST_CURSOR=1 from an interactive PicoCalc console."
   fi
   if [ "${MMB4L_TEST_DIRECTFB:-}" != "1" ]; then
-    echo "Skip reason: DirectFB PicoMiteVGA simulation checks require MMB4L_TEST_DIRECTFB=1."
+    echo "Skip reason: legacy SDL/DirectFB PicoMiteVGA simulation checks require MMB4L_TEST_DIRECTFB=1."
   fi
   ;;
 esac
@@ -302,30 +302,6 @@ is_timeout_status() {
   esac
 }
 
-check_directfbrc() {
-  name='system:/etc/directfbrc'
-  if [ ! -f /etc/directfbrc ]; then
-    echo "FAIL: $name missing"
-    add_fail "$name" "missing"
-    return
-  fi
-
-  missing=
-  for option in quiet no-banner no-debug no-vt no-vt-switch no-linux-input-grab 'disable-module=keyboard' 'disable-module=linux_input'; do
-    if ! grep -qx "$option" /etc/directfbrc; then
-      missing="${missing}${missing:+, }$option"
-    fi
-  done
-
-  if [ -n "$missing" ]; then
-    echo "FAIL: $name missing required option(s): $missing"
-    add_fail "$name" "missing required option(s): $missing"
-  else
-    echo "PASS: $name"
-    add_pass
-  fi
-}
-
 check_device_access() {
   device=$1
   name="system:$device"
@@ -339,6 +315,50 @@ check_device_access() {
     echo "PASS: $name"
     add_pass
   fi
+}
+
+check_input_access() {
+  device=$1
+  name="system:$device"
+  if [ ! -e "$device" ]; then
+    echo "FAIL: $name missing"
+    add_fail "$name" "missing"
+  elif [ ! -r "$device" ]; then
+    echo "FAIL: $name is not readable by this user"
+    add_fail "$name" "not readable by this user"
+  else
+    echo "PASS: $name"
+    add_pass
+  fi
+}
+
+check_graphics_backend() {
+  name='system:picocalc-graphics-backend'
+  test_file='picocalc/tst_picocalc_graphics_backend.bas'
+  if [ ! -f "$test_file" ]; then
+    echo "FAIL: $name missing $TEST_DIR/$test_file"
+    add_fail "$name" "missing $TEST_DIR/$test_file"
+    return 1
+  fi
+
+  output_file=${TMPDIR:-/tmp}/mmb4l-backend-$$.out
+  set +e
+  run_basic_test "$test_file" >"$output_file" 2>&1
+  status=$?
+  set -e
+  cat "$output_file"
+  rm -f "$output_file"
+
+  if [ "$status" -ne 0 ]; then
+    echo "FAIL: $name"
+    echo "PicoCalc graphics backend is not FBDEV; refusing to run framebuffer tests."
+    add_fail "$name" "backend test failed"
+    return 1
+  fi
+
+  echo "PASS: $name"
+  add_pass
+  return 0
 }
 
 check_installed_picocalc_tests() {
@@ -355,10 +375,30 @@ check_installed_picocalc_tests() {
 
 if [ "$mode" = "all" ]; then
   echo "Running target health checks"
-  check_directfbrc
   check_device_access /dev/fb0
   check_device_access /dev/tty0
+  check_input_access /dev/input/event0
+  backend_ok=1
+  check_graphics_backend || backend_ok=0
   check_installed_picocalc_tests
+
+  filtered_tests=
+  for test_file in $tests; do
+    case "$test_file" in
+    picocalc/tst_picocalc_graphics_backend.bas)
+      continue
+      ;;
+    picocalc/tst_picocalc_fbdev_*.bas|picocalc/tst_picocalc_gfx_framebuffer_*.bas)
+      if [ "$backend_ok" -ne 1 ]; then
+        add_skip "$test_file" "PicoCalc graphics backend is not FBDEV"
+        continue
+      fi
+      ;;
+    esac
+    filtered_tests="${filtered_tests}${filtered_tests:+
+}$test_file"
+  done
+  tests=$filtered_tests
 fi
 
 for test_file in $tests; do
