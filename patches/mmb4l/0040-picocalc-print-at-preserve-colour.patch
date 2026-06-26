@@ -1,0 +1,25 @@
+diff --git a/src/common/graphics.c b/src/common/graphics.c
+index e18c931..e81db04 100644
+--- a/src/common/graphics.c
++++ b/src/common/graphics.c
+@@ -279,6 +279,7 @@ MmResult graphics_ensure_default_display() {
+         return graphics_current ? kOk : kGraphicsInvalidWriteSurface;
+     }
+ 
++    const bool selecting_default = graphics_current == NULL;
+     MmResult result = graphics_init();
+     if (FAILED(result)) return result;
+ 
+@@ -295,10 +296,10 @@ MmResult graphics_ensure_default_display() {
+     }
+ 
+     graphics_backend = kGraphicsBackendFbdev;
+-    if (!graphics_current) {
++    if (selecting_default) {
+         result = graphics_surface_write(GRAPHICS_SURFACE_N);
+     }
+-    if (SUCCEEDED(result)) {
++    if (SUCCEEDED(result) && selecting_default) {
+         graphics_fcolour = RGB_WHITE;
+         graphics_bcolour = RGB_BLACK;
+         result = graphics_set_font(1, 1);

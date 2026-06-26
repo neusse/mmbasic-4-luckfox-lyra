@@ -1,0 +1,71 @@
+diff --git a/src/common/picocalc_console.c b/src/common/picocalc_console.c
+index cb1e90a..76a30be 100644
+--- a/src/common/picocalc_console.c
++++ b/src/common/picocalc_console.c
+@@ -59,6 +59,8 @@ static PicocalcConsoleMode picocalc_console_cached_mode = kPicocalcConsoleTermin
+ static int picocalc_console_cursor_x = 0;
+ static int picocalc_console_cursor_y = 0;
+ 
++#define PICOCALC_CONSOLE_FONT ((7u << 4) | 1u)  /* Built-in 6x8 font: 53 columns on 320px. */
++
+ typedef enum {
+     kPicocalcVtIdle = 0,
+     kPicocalcVtEsc,
+@@ -153,12 +155,12 @@ static bool picocalc_console_ensure_surface(void) {
+ }
+ 
+ static int picocalc_console_font_width(void) {
+-    int width = (int) font_width(graphics_font);
++    int width = (int) font_width(PICOCALC_CONSOLE_FONT);
+     return width > 0 ? width : 8;
+ }
+ 
+ static int picocalc_console_font_height(void) {
+-    int height = (int) font_height(graphics_font);
++    int height = (int) font_height(PICOCALC_CONSOLE_FONT);
+     return height > 0 ? height : 8;
+ }
+ 
+@@ -352,7 +354,7 @@ static bool picocalc_console_consume_vt(char c) {
+ }
+ 
+ static void picocalc_console_newline(void) {
+-    const int font_h = (int) font_height(graphics_font);
++    const int font_h = picocalc_console_font_height();
+     picocalc_console_cursor_x = 0;
+     picocalc_console_cursor_y += font_h;
+     if (picocalc_console_cursor_y + font_h <= graphics_current->height) return;
+@@ -368,14 +370,14 @@ static void picocalc_console_newline(void) {
+ static bool picocalc_console_draw_char(char c) {
+     if (!picocalc_console_ensure_surface()) return false;
+ 
+-    const int font_w = (int) font_width(graphics_font);
+-    const int font_h = (int) font_height(graphics_font);
++    const int font_w = picocalc_console_font_width();
++    const int font_h = picocalc_console_font_height();
+     if (picocalc_console_cursor_x + font_w > graphics_current->width) {
+         picocalc_console_newline();
+     }
+ 
+     MmResult result = graphics_draw_char(graphics_current, &picocalc_console_cursor_x,
+-                                        &picocalc_console_cursor_y, graphics_font,
++                                        &picocalc_console_cursor_y, PICOCALC_CONSOLE_FONT,
+                                         graphics_fcolour, graphics_bcolour, c,
+                                         kOrientNormal);
+     if (FAILED(result)) return false;
+@@ -396,13 +398,13 @@ bool picocalc_console_putc(char c) {
+ 
+     switch (c) {
+         case '\b': {
+-            const int font_w = (int) font_width(graphics_font);
++            const int font_w = picocalc_console_font_width();
+             if (picocalc_console_cursor_x >= font_w) {
+                 picocalc_console_cursor_x -= font_w;
+             }
+             int x = picocalc_console_cursor_x;
+             int y = picocalc_console_cursor_y;
+-            MmResult result = graphics_draw_char(graphics_current, &x, &y, graphics_font,
++            MmResult result = graphics_draw_char(graphics_current, &x, &y, PICOCALC_CONSOLE_FONT,
+                                                 graphics_fcolour, graphics_bcolour, ' ',
+                                                 kOrientNormal);
+             if (SUCCEEDED(result)) graphics_refresh_windows();
