@@ -1,0 +1,128 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Codex <codex@example.com>
+Date: Fri, 26 Jun 2026 00:00:00 -0700
+Subject: [PATCH] Enforce PicoCalc fbdev lifecycle invariants
+
+The standalone PicoCalc fbdev harness proved the real failure mode: the default
+display path opened /dev/fb0 and briefly selected FBDEV, then
+graphics_buffer_create() called graphics_init(), which reset the backend enum
+back to SDL. MM.INFO$(GRAPHICS BACKEND) hid that by reporting FBDEV whenever a
+PicoCalc framebuffer was detected, so presentation silently skipped.
+
+Fix the lifecycle to initialise/create surfaces before selecting FBDEV, report
+the real backend enum, and fail loudly if a PicoCalc fbdev surface exists while
+the backend is not FBDEV.
+---
+--- a/src/common/graphics.c
++++ b/src/common/graphics.c
+@@ -202,9 +202,6 @@
+ MmGraphicsColour graphics_cmm2_background = RGB_BLACK;
+
+ GraphicsBackend graphics_backend_current(void) {
+-    if (graphics_backend == kGraphicsBackendSdl && graphics_is_default_display_picocalc()) {
+-        return kGraphicsBackendFbdev;
+-    }
+     return graphics_backend;
+ }
+
+@@ -249,6 +246,19 @@
+     return graphics_default_display_is_picocalc;
+ }
+
++static bool graphics_picocalc_fbdev_state_started(void) {
++    return graphics_is_default_display_picocalc() &&
++           (picocalc_fbdev_is_open() || graphics_surface_exists(GRAPHICS_SURFACE_N));
++}
++
++static MmResult graphics_picocalc_backend_invariant(void) {
++    if (graphics_picocalc_fbdev_state_started() &&
++            graphics_backend != kGraphicsBackendFbdev) {
++        return error_throw_ex(kError, "PicoCalc fbdev backend invariant failed");
++    }
++    return kOk;
++}
++
+ MmResult graphics_picocalc_page_to_surface_id(MmSurfaceId page_id, MmSurfaceId *surface_id) {
+     if (!surface_id) return kInternalFault;
+
+@@ -264,27 +274,35 @@
+ }
+
+ MmResult graphics_ensure_default_display() {
+-    if (graphics_current) return kOk;
++    if (!graphics_is_default_display_picocalc()) {
++        return graphics_current ? kOk : kGraphicsInvalidWriteSurface;
++    }
++
++    MmResult result = graphics_init();
++    if (FAILED(result)) return result;
+
+-    if (!graphics_is_default_display_picocalc()) return kGraphicsInvalidWriteSurface;
++    if (!graphics_surface_exists(GRAPHICS_SURFACE_N)) {
++        result = graphics_buffer_create(GRAPHICS_SURFACE_N, PICOCALC_DISPLAY_WIDTH,
++                                        PICOCALC_DISPLAY_HEIGHT);
++        if (FAILED(result)) return result;
++    }
+
+-    MmResult result = picocalc_fbdev_open(getenv("MMB4L_FBDEV"));
++    result = picocalc_fbdev_open(getenv("MMB4L_FBDEV"));
+     if (FAILED(result)) {
+         return error_throw_ex(kError, "Unable to open PicoCalc framebuffer $: $",
+                               picocalc_fbdev_path(), picocalc_fbdev_last_error());
+     }
+
+     graphics_backend = kGraphicsBackendFbdev;
+-    if (!graphics_surface_exists(GRAPHICS_SURFACE_N)) {
+-        result = graphics_buffer_create(GRAPHICS_SURFACE_N, PICOCALC_DISPLAY_WIDTH,
+-                                        PICOCALC_DISPLAY_HEIGHT);
++    if (!graphics_current) {
++        result = graphics_surface_write(GRAPHICS_SURFACE_N);
+     }
+-    if (SUCCEEDED(result)) result = graphics_surface_write(GRAPHICS_SURFACE_N);
+     if (SUCCEEDED(result)) {
+         graphics_fcolour = RGB_WHITE;
+         graphics_bcolour = RGB_BLACK;
+         result = graphics_set_font(1, 1);
+     }
++    if (SUCCEEDED(result)) result = graphics_picocalc_backend_invariant();
+     return result;
+ }
+
+@@ -514,8 +532,8 @@
+ }
+
+ void graphics_refresh_windows() {
+-    if (graphics_backend == kGraphicsBackendFbdev) {
+-        (void) graphics_present_if_needed();
++    if (graphics_backend == kGraphicsBackendFbdev || graphics_picocalc_fbdev_state_started()) {
++        ON_FAILURE_ERROR(graphics_present_if_needed());
+         return;
+     }
+
+@@ -560,13 +578,22 @@
+ }
+
+ MmResult graphics_present_if_needed(void) {
+-    if (graphics_backend != kGraphicsBackendFbdev) return kOk;
+-    if (!picocalc_fbdev_is_open()) return kGraphicsApiError;
++    if (graphics_backend != kGraphicsBackendFbdev) {
++        ON_FAILURE_RETURN(graphics_picocalc_backend_invariant());
++        return kOk;
++    }
++    if (!picocalc_fbdev_is_open()) {
++        return error_throw_ex(kError, "PicoCalc framebuffer is not open");
++    }
+     if (graphics_presented_generation == graphics_visible_generation) return kOk;
+-    if (!graphics_surface_exists(GRAPHICS_SURFACE_N)) return kGraphicsInvalidSurface;
++    if (!graphics_surface_exists(GRAPHICS_SURFACE_N)) {
++        return error_throw_ex(kError, "PicoCalc framebuffer surface N is missing");
++    }
+
+     MmSurface *surface = &graphics_surfaces[GRAPHICS_SURFACE_N];
+-    if (!surface->pixels) return kGraphicsInvalidSurface;
++    if (!surface->pixels) {
++        return error_throw_ex(kError, "PicoCalc framebuffer surface N has no pixels");
++    }
+
+     MmResult result = picocalc_fbdev_flush_argb8888(surface->pixels, surface->width, surface->height);
+     if (SUCCEEDED(result)) {

@@ -857,6 +857,36 @@ Current limitations:
 Upstream suitability: target-specific unless upstream adds a general
 platform-visible-ID to graphics-surface mapping layer.
 
+### `0037-picocalc-fbdev-lifecycle-invariants.patch`
+
+Purpose: make the PicoCalc fbdev backend state real and enforceable.
+
+Why it is needed: the standalone fbdev harness reproduced the broken ordering
+where `/dev/fb0` was opened and the backend was set to FBDEV before
+`graphics_buffer_create()` called `graphics_init()`. That reset the real backend
+enum to SDL, while `MM.INFO$(GRAPHICS BACKEND)` still reported FBDEV because it
+used a PicoCalc-detected shortcut. The result was a silent presentation skip.
+
+What it changes:
+
+- Removes the fake backend-name mapping so `MM.INFO$(GRAPHICS BACKEND)` reports
+  the real backend enum.
+- Initialises graphics and creates surface N before selecting FBDEV.
+- Opens `/dev/fb0` and sets the backend to FBDEV after initialization can no
+  longer reset it.
+- Keeps an existing write surface selected when framebuffer F/L work is already
+  active.
+- Fails with a clear PicoCalc fbdev invariant error instead of silently falling
+  through to SDL when fbdev state exists but the backend is not FBDEV.
+
+Current limitations:
+
+- This enforces the native fbdev release path; it does not attempt to preserve
+  SDL/DirectFB fallback behavior for PicoCalc.
+
+Upstream suitability: partly reusable as embedded-Linux backend lifecycle
+cleanup, but the invariant and error policy are PicoCalc release targeted.
+
 ## Patch Rules
 
 - Keep upstream `mmb4l/` as a clean submodule checkout whenever possible.

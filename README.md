@@ -211,6 +211,7 @@ repository as the repeatable build/documentation wrapper.
 - [docs/build-mmbasic.md](docs/build-mmbasic.md)
 - [docs/deploy.md](docs/deploy.md)
 - [docs/picocalc-repl-usage.md](docs/picocalc-repl-usage.md)
+- [docs/picocalc-fbdev-truth-tables.md](docs/picocalc-fbdev-truth-tables.md)
 - [docs/patches.md](docs/patches.md)
 - [docs/future-patches.md](docs/future-patches.md)
 - [docs/luckfox-networking.md](docs/luckfox-networking.md)

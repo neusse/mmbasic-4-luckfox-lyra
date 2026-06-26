@@ -1,5 +1,7 @@
 Option Explicit
 
+CLS RGB(BLACK)
+
 Dim backend$ = MM.Info$(GRAPHICS BACKEND)
 
 If backend$ <> "FBDEV" Then

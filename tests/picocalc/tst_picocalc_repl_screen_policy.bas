@@ -1,5 +1,7 @@
 Option Explicit
 
+CLS RGB(BLACK)
+
 If MM.Info$(GRAPHICS BACKEND) <> "FBDEV" Then Error "FBDEV backend required"
 If MM.Info$(CONSOLE MODE) <> "TERMINAL" Then Error "Console mode should default to terminal"
 

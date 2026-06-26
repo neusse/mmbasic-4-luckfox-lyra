@@ -44,6 +44,25 @@ CSUB baseline, REST client, checker, and target test runner now exist.
 
 ## Priority 2: Graphics Polish
 
+- Enforce the fbdev-only PicoCalc release policy. Do not silently fall back to
+  SDL or DirectFB when the target is the PicoCalc framebuffer.
+- Use `docs/picocalc-fbdev-truth-tables.md` and the standalone
+  `tools/picocalc_fbdev_harness.c` before changing the interpreter graphics
+  lifecycle again.
+- Treat harness return codes and `/dev/fb0` samples as necessary but not
+  sufficient. Visual display acceptance requires a human check on the physical
+  PicoCalc screen.
+- Keep the harness `text-layering` case as the executable proof for direct
+  text-over-graphics, `PRINT @`, F/L isolation, and transparent layer merge.
+- Preserve the physical display cleanup found by the harness: after full-screen
+  graphics tests, clear `/dev/fb0` black and blank/unblank `fb0` so the
+  ILI9488 SPI panel does not retain stale right/bottom edge pixels outside the
+  exposed 320x320 framebuffer.
+- Fix the current forbidden state where `/dev/fb0` is open but the graphics
+  backend has been reset to SDL. The harness reproduces this as
+  `buggy-order`.
+- Make PicoCalc presentation fail loudly if the backend is not `FBDEV`,
+  `/dev/fb0` is not open, or surface N is missing.
 - Keep testing real BASIC programs for `CLS`, `TEXT`, `PRINT @`, sprites,
   framebuffer pages, images, and mixed text/graphics behavior.
 - Add more visual regression tests and screenshots for known-good demos.
