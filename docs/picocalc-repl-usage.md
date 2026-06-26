@@ -2,11 +2,13 @@
 
 MMBasic has one command prompt and one graphics output surface.
 
-On the Luckfox PicoCalc build, the prompt is the terminal that started
-`mmbasic`: SSH, ADB shell, an X11 terminal, or the physical Linux console.
-Graphics commands draw to the PicoCalc framebuffer. GUI/X11 desktop use is not
-the primary support target; depending on the host display stack, it may behave
-differently from the PicoCalc Linux console/text environment.
+On the Luckfox PicoCalc build, SSH and ADB sessions use the terminal that
+started `mmbasic` for the prompt while graphics commands draw to the PicoCalc
+framebuffer. On the physical Linux console, MMBasic can use the PicoCalc
+framebuffer as a simple screen console for text output and graphics together.
+GUI/X11 desktop use is not the primary support target; depending on the host
+display stack, it may behave differently from the PicoCalc Linux console/text
+environment.
 
 ## Starting MMBasic
 
@@ -51,7 +53,9 @@ CLS
 ```
 
 Clears the terminal console when no graphics surface is already open. After a
-graphics surface exists, bare `CLS` clears the active graphics surface.
+graphics surface exists, bare `CLS` clears the active graphics surface. In
+PicoCalc screen-console mode, it also homes the framebuffer text cursor so the
+next `PRINT` or REPL prompt starts at the top-left of the PicoCalc screen.
 
 ```basic
 CLS RGB(BLACK)
@@ -71,6 +75,28 @@ SYSTEM "clear"
 ```
 
 Uses the Linux shell to clear the terminal.
+
+## Screen Console Mode
+
+The physical PicoCalc console is detected automatically when MMBasic is
+started from a Linux virtual console. For testing from SSH or ADB, force the
+same path with:
+
+```sh
+MMB4L_PICOCALC_CONSOLE=screen mmbasic
+```
+
+In screen-console mode:
+
+- Plain `PRINT` draws text on the PicoCalc framebuffer using the current
+  MMBasic font and graphics colours.
+- `CLS` clears the framebuffer and resets the text cursor to the top-left.
+- `PRINT @(x,y)` draws at pixel coordinates and no longer lets its trailing
+  newline scroll the normal text cursor.
+- Common ANSI/VT100 sequences are consumed for compatibility, including clear
+  screen, cursor home/position/movement, clear-to-end-of-line, cursor
+  visibility, title, and style sequences. Unsupported sequences are swallowed
+  rather than drawn as raw `[2J` style text.
 
 ## Why A Blank Window Can Happen
 

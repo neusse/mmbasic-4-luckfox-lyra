@@ -137,6 +137,9 @@ powershell -ExecutionPolicy Bypass -File .\scripts\build-mmbasic.ps1
 
 See [docs/build-mmbasic.md](docs/build-mmbasic.md).
 
+For repeatable patch, build, deploy, test, release, and pre-commit workflows,
+use the fixed scripts documented in [docs/dev-automation.md](docs/dev-automation.md).
+
 ## Compiled Binary
 
 A compiled ARMv7 Luckfox/PicoCalc binary is included at

@@ -887,6 +887,41 @@ Current limitations:
 Upstream suitability: partly reusable as embedded-Linux backend lifecycle
 cleanup, but the invariant and error policy are PicoCalc release targeted.
 
+### `0038-picocalc-screen-console-vt100-cursor.patch`
+
+Purpose: make PicoCalc screen-console text behave like a usable BASIC console
+instead of a raw byte renderer.
+
+Why it is needed: real programs and the MMBasic REPL mix plain text, `CLS`,
+`PRINT @`, and terminal escape sequences. Before this patch, VT100 sequences
+such as `ESC[2J` rendered as visible characters, bare `CLS` after graphics was
+open cleared the framebuffer but left the text cursor lower on the screen, and
+menu programs using repeated `PRINT @(x,y)` redraws leaked `PRINT`'s trailing
+linefeed into the normal scrolling text cursor.
+
+What it changes:
+
+- Adds a small PicoCalc screen-console ANSI/VT100 parser for clear screen,
+  cursor home/position/movement, clear-to-end-of-line, cursor visibility,
+  title, and style sequences.
+- Suppresses internal terminal helper escape output while PicoCalc screen mode
+  is active, routing cursor movement through the framebuffer console where
+  appropriate.
+- Makes graphics `CLS` reset the PicoCalc screen-console cursor when screen
+  mode is active.
+- Keeps `PRINT @` CR/LF handling inside the positioned graphics text cursor so
+  redraw-heavy menu programs do not scroll away.
+- Adds target tests for screen-console cursor behavior and VT100 handling.
+
+Current limitations:
+
+- ANSI style and colour sequences are consumed for cleanliness but are not a
+  full terminal emulator. BASIC `COLOR` and graphics colour commands remain the
+  supported way to control framebuffer text colours.
+
+Upstream suitability: PicoCalc-specific, though the terminal-state separation
+may be a useful model for other embedded framebuffer targets.
+
 ## Patch Rules
 
 - Keep upstream `mmb4l/` as a clean submodule checkout whenever possible.

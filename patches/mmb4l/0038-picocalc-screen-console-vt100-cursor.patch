@@ -1,0 +1,452 @@
+diff --git a/src/commands/cmd_cls.c b/src/commands/cmd_cls.c
+index b9259af..be0ae3a 100644
+--- a/src/commands/cmd_cls.c
++++ b/src/commands/cmd_cls.c
+@@ -47,6 +47,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ #include "../common/graphics.h"
+ #include "../common/mmb4l.h"
+ #include "../common/parse.h"
++#include "../common/picocalc_console.h"
+ #include "../common/utility.h"
+ 
+ /** CLS CONSOLE */
+@@ -78,7 +79,14 @@ graphics_cls:
+     const MmGraphicsColour colour = has_arg(0)
+             ? getint(argv[0], RGB_BLACK, RGB_WHITE)
+             : (graphics_current == layer) ? layer->transparent : graphics_bcolour;
+-    return graphics_cls(graphics_current, colour);
++    MmResult result = graphics_cls(graphics_current, colour);
++    if (SUCCEEDED(result)
++            && picocalc_console_uses_screen
++            && picocalc_console_uses_screen()
++            && picocalc_console_reset_cursor) {
++        picocalc_console_reset_cursor();
++    }
++    return result;
+ }
+ 
+ void cmd_cls(void) {
+diff --git a/src/common/console.c b/src/common/console.c
+index ccd2a17..30d9f71 100644
+--- a/src/common/console.c
++++ b/src/common/console.c
+@@ -101,6 +101,11 @@ void console_clear(void) {
+ 
+ void console_cursor_up(int i) {
+     assert(i > 0);
++    if (console_use_picocalc_screen()
++            && picocalc_console_cursor_up) {
++        picocalc_console_cursor_up(i);
++        return;
++    }
+     printf("\033[%dA", i);
+     fflush(stdout);
+ }
+@@ -358,6 +363,7 @@ void console_puts(const char *s) {
+ 
+ void console_set_title(const char *title, bool command) {
+     if (!command && console_no_title) return;
++    if (console_use_picocalc_screen()) return;
+     printf("\x1b]0;%s\x7", title);
+     fflush(stdout);
+ }
+@@ -461,11 +467,21 @@ int console_get_size(int *width, int *height, int timeout_ms) {
+ }
+ 
+ void console_home_cursor(void) {
++    if (console_use_picocalc_screen()
++            && picocalc_console_home_cursor) {
++        picocalc_console_home_cursor();
++        return;
++    }
+     printf("\x1b[H");
+     fflush(stdout);
+ }
+ 
+ void console_set_cursor_pos(int x, int y) {
++    if (console_use_picocalc_screen()
++            && picocalc_console_set_cursor_pos) {
++        picocalc_console_set_cursor_pos(x, y);
++        return;
++    }
+     printf("\033[%d;%dH", y + 1, x + 1); // VT100 origin is (1,1) not (0,0).
+     fflush(stdout);
+ }
+@@ -492,28 +508,33 @@ int console_set_size(int width, int height) {
+ const int ANSI_COLOURS[] = { 0, 4, 2, 6, 1, 5, 3, 7, 10, 14, 12, 16, 11, 15, 13, 17 };
+ 
+ void console_background(int colour) {
++    if (console_use_picocalc_screen()) return;
+     int ansi_colour = ANSI_COLOURS[colour];
+     printf("\033[%dm", ansi_colour + (ansi_colour < 10 ? 40 : 90));
+     fflush(stdout);
+ }
+ 
+ void console_foreground(int colour) {
++    if (console_use_picocalc_screen()) return;
+     int ansi_colour = ANSI_COLOURS[colour];
+     printf("\033[%dm", ansi_colour + (ansi_colour < 10 ? 30 : 80));
+     fflush(stdout);
+ }
+ 
+ void console_invert(int invert) {
++    if (console_use_picocalc_screen()) return;
+     printf(invert ? "\033[7m" : "\033[27m");
+     fflush(stdout);
+ }
+ 
+ void console_reset() {
++    if (console_use_picocalc_screen()) return;
+     printf("\033[0m");
+     fflush(stdout);
+ }
+ 
+ void console_show_cursor(bool show) {
++    if (console_use_picocalc_screen()) return;
+     printf(show ? "\033[?25h" : "\033[?25l");
+     fflush(stdout);
+ }
+diff --git a/src/common/graphics.c b/src/common/graphics.c
+index 40dfc3d..e18c931 100644
+--- a/src/common/graphics.c
++++ b/src/common/graphics.c
+@@ -178,6 +178,7 @@ static uint64_t frameEnd = 0;
+ static bool graphics_default_display_probe_done = false;
+ static bool graphics_default_display_is_picocalc = false;
+ static bool graphics_console_cursor_active = false;
++static bool graphics_console_swallow_lf = false;
+ static int graphics_console_cursor_x = 0;
+ static int graphics_console_cursor_y = 0;
+ static int graphics_console_cursor_start_x = 0;
+@@ -311,6 +312,7 @@ bool graphics_console_set_cursor(int x, int y) {
+     if (FAILED(graphics_ensure_default_display())) return false;
+ 
+     graphics_console_cursor_active = true;
++    graphics_console_swallow_lf = false;
+     graphics_console_cursor_x = x;
+     graphics_console_cursor_y = y;
+     graphics_console_cursor_start_x = x;
+@@ -319,18 +321,34 @@ bool graphics_console_set_cursor(int x, int y) {
+ 
+ void graphics_console_clear_cursor(void) {
+     graphics_console_cursor_active = false;
++    graphics_console_swallow_lf = false;
+ }
+ 
+ bool graphics_console_putc(char c) {
+-    if (!graphics_console_cursor_active) return false;
++    if (!graphics_console_cursor_active) {
++        if (graphics_console_swallow_lf && c == '\n') {
++            graphics_console_swallow_lf = false;
++            return true;
++        }
++        graphics_console_swallow_lf = false;
++        return false;
++    }
+ 
+     if (!graphics_current) {
+         graphics_console_cursor_active = false;
++        graphics_console_swallow_lf = false;
+         return false;
+     }
+ 
+-    if (c == '\r' || c == '\n') {
++    if (c == '\r') {
+         graphics_console_cursor_active = false;
++        graphics_console_swallow_lf = true;
++        return true;
++    }
++
++    if (c == '\n') {
++        graphics_console_cursor_active = false;
++        graphics_console_swallow_lf = false;
+         return true;
+     }
+ 
+@@ -345,7 +363,10 @@ bool graphics_console_putc(char c) {
+         MmResult result = graphics_draw_char(graphics_current, &x, &y, graphics_font,
+                                             graphics_fcolour, graphics_bcolour, ' ',
+                                             kOrientNormal);
+-        if (FAILED(result)) graphics_console_cursor_active = false;
++        if (FAILED(result)) {
++            graphics_console_cursor_active = false;
++            graphics_console_swallow_lf = false;
++        }
+         else graphics_refresh_windows();
+         return SUCCEEDED(result);
+     }
+@@ -360,7 +381,10 @@ bool graphics_console_putc(char c) {
+                                         &graphics_console_cursor_y, graphics_font,
+                                         graphics_fcolour, graphics_bcolour, c,
+                                         kOrientNormal);
+-    if (FAILED(result)) graphics_console_cursor_active = false;
++    if (FAILED(result)) {
++        graphics_console_cursor_active = false;
++        graphics_console_swallow_lf = false;
++    }
+     else graphics_refresh_windows();
+     return SUCCEEDED(result);
+ }
+diff --git a/src/common/picocalc_console.c b/src/common/picocalc_console.c
+index e7fb4d1..cb1e90a 100644
+--- a/src/common/picocalc_console.c
++++ b/src/common/picocalc_console.c
+@@ -59,6 +59,23 @@ static PicocalcConsoleMode picocalc_console_cached_mode = kPicocalcConsoleTermin
+ static int picocalc_console_cursor_x = 0;
+ static int picocalc_console_cursor_y = 0;
+ 
++typedef enum {
++    kPicocalcVtIdle = 0,
++    kPicocalcVtEsc,
++    kPicocalcVtCsi,
++    kPicocalcVtOsc,
++} PicocalcVtState;
++
++static PicocalcVtState picocalc_vt_state = kPicocalcVtIdle;
++static char picocalc_vt_csi[32] = { 0 };
++static size_t picocalc_vt_csi_len = 0;
++
++static void picocalc_console_reset_vt(void) {
++    picocalc_vt_state = kPicocalcVtIdle;
++    picocalc_vt_csi_len = 0;
++    picocalc_vt_csi[0] = '\0';
++}
++
+ static bool picocalc_console_env_is(const char *value, const char *expected) {
+     return value && strcasecmp(value, expected) == 0;
+ }
+@@ -126,6 +143,7 @@ void picocalc_console_reset_detection(void) {
+ void picocalc_console_reset_cursor(void) {
+     picocalc_console_cursor_x = 0;
+     picocalc_console_cursor_y = 0;
++    picocalc_console_reset_vt();
+ }
+ 
+ static bool picocalc_console_ensure_surface(void) {
+@@ -134,6 +152,205 @@ static bool picocalc_console_ensure_surface(void) {
+     return graphics_current != NULL;
+ }
+ 
++static int picocalc_console_font_width(void) {
++    int width = (int) font_width(graphics_font);
++    return width > 0 ? width : 8;
++}
++
++static int picocalc_console_font_height(void) {
++    int height = (int) font_height(graphics_font);
++    return height > 0 ? height : 8;
++}
++
++static int picocalc_console_clamp(int value, int min_value, int max_value) {
++    if (max_value < min_value) return min_value;
++    if (value < min_value) return min_value;
++    if (value > max_value) return max_value;
++    return value;
++}
++
++static void picocalc_console_set_cursor_cells(int x, int y) {
++    if (!picocalc_console_ensure_surface()) {
++        picocalc_console_cursor_x = 0;
++        picocalc_console_cursor_y = 0;
++        return;
++    }
++
++    const int font_w = picocalc_console_font_width();
++    const int font_h = picocalc_console_font_height();
++    const int max_x = (graphics_current->width - font_w) / font_w;
++    const int max_y = (graphics_current->height - font_h) / font_h;
++    picocalc_console_cursor_x = picocalc_console_clamp(x, 0, max_x) * font_w;
++    picocalc_console_cursor_y = picocalc_console_clamp(y, 0, max_y) * font_h;
++}
++
++void picocalc_console_home_cursor(void) {
++    picocalc_console_reset_cursor();
++}
++
++void picocalc_console_set_cursor_pos(int x, int y) {
++    picocalc_console_set_cursor_cells(x, y);
++    picocalc_console_reset_vt();
++}
++
++void picocalc_console_cursor_up(int rows) {
++    if (rows <= 0) return;
++    if (!picocalc_console_ensure_surface()) {
++        picocalc_console_reset_cursor();
++        return;
++    }
++
++    const int font_h = picocalc_console_font_height();
++    picocalc_console_cursor_y = picocalc_console_clamp(
++            picocalc_console_cursor_y - rows * font_h,
++            0, graphics_current->height - font_h);
++    picocalc_console_reset_vt();
++}
++
++static void picocalc_console_move_cursor_cells(int dx, int dy) {
++    if (!picocalc_console_ensure_surface()) {
++        picocalc_console_reset_cursor();
++        return;
++    }
++
++    const int font_w = picocalc_console_font_width();
++    const int font_h = picocalc_console_font_height();
++    picocalc_console_set_cursor_cells(picocalc_console_cursor_x / font_w + dx,
++                                      picocalc_console_cursor_y / font_h + dy);
++}
++
++static void picocalc_console_clear_to_eol(void) {
++    if (!picocalc_console_ensure_surface()) return;
++
++    const int font_h = picocalc_console_font_height();
++    const int y2 = picocalc_console_clamp(picocalc_console_cursor_y + font_h - 1,
++                                          0, graphics_current->height - 1);
++    if (SUCCEEDED(graphics_draw_rectangle(graphics_current,
++                                          picocalc_console_cursor_x,
++                                          picocalc_console_cursor_y,
++                                          graphics_current->width - 1,
++                                          y2,
++                                          graphics_bcolour))) {
++        graphics_refresh_windows();
++    }
++}
++
++static int picocalc_console_csi_param(int index, int default_value) {
++    int current = 0;
++    int value = 0;
++    bool have_value = false;
++
++    const char *p = picocalc_vt_csi;
++    if (*p == '?') p++;
++
++    while (true) {
++        const char c = *p;
++        if (isdigit((unsigned char) c)) {
++            have_value = true;
++            value = value * 10 + (c - '0');
++        } else if (c == ';' || c == '\0') {
++            if (current == index) return have_value ? value : default_value;
++            current++;
++            value = 0;
++            have_value = false;
++            if (c == '\0') break;
++        }
++
++        if (c == '\0') break;
++        p++;
++    }
++
++    return default_value;
++}
++
++static void picocalc_console_handle_csi(char final) {
++    const int count = picocalc_console_csi_param(0, 1);
++
++    switch (final) {
++        case 'J':
++            picocalc_console_clear();
++            break;
++        case 'K':
++            picocalc_console_clear_to_eol();
++            break;
++        case 'H':
++        case 'f': {
++            const int row = picocalc_console_csi_param(0, 1);
++            const int col = picocalc_console_csi_param(1, 1);
++            picocalc_console_set_cursor_cells(col - 1, row - 1);
++            break;
++        }
++        case 'A':
++            picocalc_console_move_cursor_cells(0, -count);
++            break;
++        case 'B':
++            picocalc_console_move_cursor_cells(0, count);
++            break;
++        case 'C':
++            picocalc_console_move_cursor_cells(count, 0);
++            break;
++        case 'D':
++            picocalc_console_move_cursor_cells(-count, 0);
++            break;
++        case 'h':
++        case 'l':
++        case 'm':
++            break;
++        default:
++            break;
++    }
++}
++
++static bool picocalc_console_consume_vt(char c) {
++    const unsigned char uc = (unsigned char) c;
++
++    switch (picocalc_vt_state) {
++        case kPicocalcVtIdle:
++            if (uc == 0x1B) {
++                picocalc_vt_state = kPicocalcVtEsc;
++                return true;
++            }
++            return false;
++
++        case kPicocalcVtEsc:
++            if (c == '[') {
++                picocalc_vt_state = kPicocalcVtCsi;
++                picocalc_vt_csi_len = 0;
++                picocalc_vt_csi[0] = '\0';
++                return true;
++            }
++            if (c == ']') {
++                picocalc_vt_state = kPicocalcVtOsc;
++                return true;
++            }
++            picocalc_console_reset_vt();
++            return true;
++
++        case kPicocalcVtCsi:
++            if (uc >= 0x40 && uc <= 0x7E) {
++                picocalc_console_handle_csi(c);
++                picocalc_console_reset_vt();
++                return true;
++            }
++            if (picocalc_vt_csi_len + 1 < sizeof(picocalc_vt_csi)) {
++                picocalc_vt_csi[picocalc_vt_csi_len++] = c;
++                picocalc_vt_csi[picocalc_vt_csi_len] = '\0';
++            }
++            return true;
++
++        case kPicocalcVtOsc:
++            if (uc == 0x07) {
++                picocalc_console_reset_vt();
++            } else if (uc == 0x1B) {
++                picocalc_vt_state = kPicocalcVtEsc;
++            }
++            return true;
++    }
++
++    picocalc_console_reset_vt();
++    return true;
++}
++
+ static void picocalc_console_newline(void) {
+     const int font_h = (int) font_height(graphics_font);
+     picocalc_console_cursor_x = 0;
+@@ -173,6 +390,7 @@ static bool picocalc_console_draw_char(char c) {
+ 
+ bool picocalc_console_putc(char c) {
+     if (!picocalc_console_uses_screen()) return false;
++    if (picocalc_console_consume_vt(c)) return true;
+     if (graphics_console_putc(c)) return true;
+     if (!picocalc_console_ensure_surface()) return false;
+ 
+diff --git a/src/common/picocalc_console.h b/src/common/picocalc_console.h
+index 20b1ad8..8fd684e 100644
+--- a/src/common/picocalc_console.h
++++ b/src/common/picocalc_console.h
+@@ -65,5 +65,8 @@ void picocalc_console_reset_detection(void) PICOCALC_CONSOLE_WEAK;
+ bool picocalc_console_putc(char c) PICOCALC_CONSOLE_WEAK;
+ bool picocalc_console_clear(void) PICOCALC_CONSOLE_WEAK;
+ void picocalc_console_reset_cursor(void) PICOCALC_CONSOLE_WEAK;
++void picocalc_console_home_cursor(void) PICOCALC_CONSOLE_WEAK;
++void picocalc_console_set_cursor_pos(int x, int y) PICOCALC_CONSOLE_WEAK;
++void picocalc_console_cursor_up(int rows) PICOCALC_CONSOLE_WEAK;
+ 
+ #endif // #if !defined(MMBASIC_PICOCALC_CONSOLE_H)
