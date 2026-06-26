@@ -761,6 +761,38 @@ Upstream suitability: target-specific as written. The `N/F/L` mapping is useful
 for PicoMite compatibility, but the fbdev presentation hook is Luckfox/PicoCalc
 specific.
 
+### `0034-picocalc-console-policy.patch`
+
+Purpose: make PicoCalc REPL/display ownership explicit instead of inheriting
+DirectFB or SDL side effects.
+
+Why it is needed: MMBasic can be run from SSH/ADB terminals, Linux pseudo
+terminals, or the physical PicoCalc console. Graphics should not steal a normal
+terminal REPL, but the physical console needs a framebuffer-backed text path
+when MMBasic owns the screen.
+
+What it changes:
+
+- Adds a PicoCalc console policy module with `TERMINAL` and `SCREEN` modes.
+- Defaults SSH/ADB and `/dev/pts/*` sessions to terminal mode.
+- Detects Linux virtual consoles such as `/dev/tty0` and `/dev/tty1` as screen
+  mode, with `MMB4L_PICOCALC_CONSOLE=screen|terminal` as an override.
+- Adds `MM.INFO$(CONSOLE MODE)` so users and tests can inspect the selected
+  policy.
+- Keeps positioned `PRINT @(x,y)` graphics output working while routing normal
+  console text to the framebuffer only in screen mode.
+- Makes `CLS CONSOLE` and bare text-mode `CLS` clear the framebuffer console
+  when MMBasic is running on the physical PicoCalc console.
+
+Current limitations:
+
+- Screen-mode input still uses the existing terminal input path until the evdev
+  keyboard patch lands.
+
+Upstream suitability: partly reusable. The terminal/screen policy and
+diagnostic are useful embedded-Linux structure, but the virtual-console default
+and framebuffer renderer are PicoCalc-targeted.
+
 ## Patch Rules
 
 - Keep upstream `mmb4l/` as a clean submodule checkout whenever possible.
