@@ -1,0 +1,256 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Codex <codex@example.com>
+Date: Fri, 26 Jun 2026 00:00:00 -0700
+Subject: [PATCH] Add native PicoCalc fbdev presenter
+
+Add a Linux fbdev presenter that can open the PicoCalc framebuffer, validate
+its 320x320 RGB565 shape, map it, and flush an in-memory ARGB/RGB888 surface to
+/dev/fb0. The presenter is compiled on Linux but is not selected as the
+active graphics backend until the follow-up software-surface patch.
+---
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -222,6 +222,10 @@
+     src/common/xmodem.c
+ )
+ 
++if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
++    list(APPEND MMB4L_COMMON_SOURCE_FILES src/common/picocalc_fbdev.c)
++endif()
++
+ set(MMB4L_THIRD_PARTY_SOURCE_FILES
+     src/third_party/cJSON.c
+     src/third_party/dr_audio.c
+--- /dev/null
++++ b/src/common/picocalc_fbdev.h
+@@ -0,0 +1,29 @@
++#if !defined(MMB4L_PICOCALC_FBDEV_H)
++#define MMB4L_PICOCALC_FBDEV_H
++
++#include <stdbool.h>
++#include <stdint.h>
++
++#include "mmresult.h"
++
++typedef struct PicocalcFbdevInfo {
++    int width;
++    int height;
++    int line_length;
++    int bits_per_pixel;
++    uint32_t red_offset;
++    uint32_t green_offset;
++    uint32_t blue_offset;
++} PicocalcFbdevInfo;
++
++bool picocalc_fbdev_is_open(void);
++const char *picocalc_fbdev_path(void);
++const char *picocalc_fbdev_last_error(void);
++MmResult picocalc_fbdev_open(const char *path);
++void picocalc_fbdev_close(void);
++const PicocalcFbdevInfo *picocalc_fbdev_info(void);
++MmResult picocalc_fbdev_flush_argb8888(const uint32_t *pixels, int width, int height);
++MmResult picocalc_fbdev_write_ppm_screenshot(const char *path, const uint32_t *pixels,
++                                             int width, int height);
++
++#endif
+--- /dev/null
++++ b/src/common/picocalc_fbdev.c
+@@ -0,0 +1,198 @@
++#include "picocalc_fbdev.h"
++
++#include <errno.h>
++#include <fcntl.h>
++#include <linux/fb.h>
++#include <stddef.h>
++#include <stdio.h>
++#include <string.h>
++#include <sys/ioctl.h>
++#include <sys/mman.h>
++#include <unistd.h>
++
++static int fb_fd = -1;
++static uint8_t *fb_mem = NULL;
++static size_t fb_mem_len = 0;
++static char fb_path[128] = "/dev/fb0";
++static char fb_error[256] = "";
++static PicocalcFbdevInfo fb_info = {0};
++
++static void fb_set_error(const char *prefix) {
++    snprintf(fb_error, sizeof(fb_error), "%s: %s", prefix, strerror(errno));
++}
++
++static void fb_set_message(const char *message) {
++    snprintf(fb_error, sizeof(fb_error), "%s", message);
++}
++
++static uint16_t rgb888_to_rgb565(uint32_t pixel) {
++    uint8_t r = (uint8_t)((pixel >> 16) & 0xff);
++    uint8_t g = (uint8_t)((pixel >> 8) & 0xff);
++    uint8_t b = (uint8_t)(pixel & 0xff);
++    return (uint16_t)(((uint16_t)(r & 0xf8) << 8) |
++                      ((uint16_t)(g & 0xfc) << 3) |
++                      ((uint16_t)b >> 3));
++}
++
++bool picocalc_fbdev_is_open(void) {
++    return fb_fd >= 0 && fb_mem != NULL;
++}
++
++const char *picocalc_fbdev_path(void) {
++    return fb_path;
++}
++
++const char *picocalc_fbdev_last_error(void) {
++    return fb_error;
++}
++
++void picocalc_fbdev_close(void) {
++    if (fb_mem && fb_mem != MAP_FAILED) {
++        munmap(fb_mem, fb_mem_len);
++    }
++    fb_mem = NULL;
++    fb_mem_len = 0;
++
++    if (fb_fd >= 0) {
++        close(fb_fd);
++    }
++    fb_fd = -1;
++    memset(&fb_info, 0, sizeof(fb_info));
++}
++
++const PicocalcFbdevInfo *picocalc_fbdev_info(void) {
++    return &fb_info;
++}
++
++MmResult picocalc_fbdev_open(const char *path) {
++    struct fb_fix_screeninfo fix;
++    struct fb_var_screeninfo var;
++    const char *target = (path && *path) ? path : "/dev/fb0";
++
++    if (picocalc_fbdev_is_open()) return kOk;
++
++    snprintf(fb_path, sizeof(fb_path), "%s", target);
++    fb_error[0] = '\0';
++
++    fb_fd = open(target, O_RDWR | O_CLOEXEC);
++    if (fb_fd < 0) {
++        fb_set_error("open framebuffer");
++        return errno;
++    }
++
++    if (ioctl(fb_fd, FBIOGET_FSCREENINFO, &fix) != 0) {
++        MmResult result = errno;
++        fb_set_error("FBIOGET_FSCREENINFO");
++        picocalc_fbdev_close();
++        return result;
++    }
++
++    if (ioctl(fb_fd, FBIOGET_VSCREENINFO, &var) != 0) {
++        MmResult result = errno;
++        fb_set_error("FBIOGET_VSCREENINFO");
++        picocalc_fbdev_close();
++        return result;
++    }
++
++    if (var.xres != 320 || var.yres != 320) {
++        snprintf(fb_error, sizeof(fb_error), "unexpected framebuffer size %ux%u",
++                 var.xres, var.yres);
++        picocalc_fbdev_close();
++        return kGraphicsApiError;
++    }
++
++    if (var.bits_per_pixel != 16) {
++        snprintf(fb_error, sizeof(fb_error), "unexpected framebuffer depth %u bpp",
++                 var.bits_per_pixel);
++        picocalc_fbdev_close();
++        return kGraphicsApiError;
++    }
++
++    if (fix.line_length < 320 * 2) {
++        snprintf(fb_error, sizeof(fb_error), "framebuffer stride too small: %u",
++                 fix.line_length);
++        picocalc_fbdev_close();
++        return kGraphicsApiError;
++    }
++
++    if (fix.smem_len < (size_t)fix.line_length * 320u) {
++        snprintf(fb_error, sizeof(fb_error), "framebuffer memory too small: %u",
++                 fix.smem_len);
++        picocalc_fbdev_close();
++        return kGraphicsApiError;
++    }
++
++    fb_mem_len = (size_t)fix.smem_len;
++    fb_mem = mmap(NULL, fb_mem_len, PROT_READ | PROT_WRITE, MAP_SHARED, fb_fd, 0);
++    if (fb_mem == MAP_FAILED) {
++        MmResult result = errno;
++        fb_mem = NULL;
++        fb_set_error("mmap framebuffer");
++        picocalc_fbdev_close();
++        return result;
++    }
++
++    fb_info.width = (int)var.xres;
++    fb_info.height = (int)var.yres;
++    fb_info.line_length = (int)fix.line_length;
++    fb_info.bits_per_pixel = (int)var.bits_per_pixel;
++    fb_info.red_offset = var.red.offset;
++    fb_info.green_offset = var.green.offset;
++    fb_info.blue_offset = var.blue.offset;
++    return kOk;
++}
++
++MmResult picocalc_fbdev_flush_argb8888(const uint32_t *pixels, int width, int height) {
++    if (!picocalc_fbdev_is_open()) {
++        fb_set_message("framebuffer is not open");
++        return kGraphicsApiError;
++    }
++    if (!pixels || width != fb_info.width || height != fb_info.height) {
++        fb_set_message("source surface does not match framebuffer geometry");
++        return kGraphicsInvalidSurface;
++    }
++
++    for (int y = 0; y < height; ++y) {
++        uint16_t *dst = (uint16_t *)(fb_mem + (size_t)y * (size_t)fb_info.line_length);
++        const uint32_t *src = pixels + (size_t)y * (size_t)width;
++        for (int x = 0; x < width; ++x) {
++            dst[x] = rgb888_to_rgb565(src[x]);
++        }
++    }
++    return kOk;
++}
++
++MmResult picocalc_fbdev_write_ppm_screenshot(const char *path, const uint32_t *pixels,
++                                             int width, int height) {
++    if (!path || !*path || !pixels || width <= 0 || height <= 0) return kInvalidArgument;
++
++    FILE *fp = fopen(path, "wb");
++    if (!fp) {
++        fb_set_error("open screenshot");
++        return errno;
++    }
++
++    fprintf(fp, "P6\n%d %d\n255\n", width, height);
++    for (int y = 0; y < height; ++y) {
++        const uint32_t *row = pixels + (size_t)y * (size_t)width;
++        for (int x = 0; x < width; ++x) {
++            unsigned char rgb[3] = {
++                (unsigned char)((row[x] >> 16) & 0xff),
++                (unsigned char)((row[x] >> 8) & 0xff),
++                (unsigned char)(row[x] & 0xff),
++            };
++            if (fwrite(rgb, 1, sizeof(rgb), fp) != sizeof(rgb)) {
++                MmResult result = errno ? errno : kError;
++                fb_set_error("write screenshot");
++                fclose(fp);
++                return result;
++            }
++        }
++    }
++
++    if (fclose(fp) != 0) {
++        fb_set_error("close screenshot");
++        return errno;
++    }
++    return kOk;
++}

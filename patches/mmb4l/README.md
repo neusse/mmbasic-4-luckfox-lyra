@@ -668,6 +668,35 @@ Upstream suitability: target-supporting. The backend identity query is broadly
 useful, but the immediate motivation is proving Luckfox/PicoCalc backend
 selection during the fbdev conversion.
 
+### `0031-picocalc-fbdev-presenter.patch`
+
+Purpose: add the native Linux fbdev presenter that will replace the
+SDL2/DirectFB PicoCalc release display path.
+
+Why it is needed: the VM-style framebuffer plan requires MMBasic to draw into
+a software surface first, then present that surface directly to `/dev/fb0`.
+This patch adds the low-level presenter before wiring it into the graphics
+surface lifecycle.
+
+What it changes:
+
+- Adds `picocalc_fbdev.h` and `picocalc_fbdev.c`.
+- Opens and verifies a 320x320 RGB565 Linux framebuffer.
+- Maps `/dev/fb0` and converts ARGB/RGB888 source pixels to RGB565 rows.
+- Adds a PPM screenshot helper for target-side framebuffer diagnostics.
+- Adds a PicoCalc fbdev pixel smoke test and a PowerShell target verification
+  script.
+
+Current limitations:
+
+- The presenter is compiled but not selected as the active PicoCalc graphics
+  backend yet. The next patch creates the PicoCalc default display as a
+  software surface and flushes it through this presenter.
+
+Upstream suitability: target-specific as written. The fbdev presenter model may
+be useful to upstream MMB4L, but this implementation intentionally validates the
+PicoCalc 320x320 RGB565 framebuffer.
+
 ## Patch Rules
 
 - Keep upstream `mmb4l/` as a clean submodule checkout whenever possible.
