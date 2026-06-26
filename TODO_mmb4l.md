@@ -23,11 +23,14 @@ CSUB baseline, REST client, checker, and target test runner now exist.
 1. Finish PicoCalc input reliability.
 2. Continue graphics polish using real BASIC programs and visual regression
    tests.
-3. Add real audio support or document the final no-audio compatibility policy.
-4. Implement the inbound WebMite-style HTTP/TCP server surface.
-5. Create the PicoCalc pin and bus safety map.
-6. Add safe Linux-backed GPIO, I2C, and SPI only after the pin map is complete.
-7. Continue selected PicoMite/WebMite V6 language compatibility work.
+3. Use the VM-MMBasic tree as reference material for HAL cleanup, framebuffer
+   design, shared graphics tests, networking organization, PicoCalc hardware
+   protocol notes, and checker coverage.
+4. Add real audio support or document the final no-audio compatibility policy.
+5. Implement the inbound WebMite-style HTTP/TCP server surface.
+6. Create the PicoCalc pin and bus safety map.
+7. Add safe Linux-backed GPIO, I2C, and SPI only after the pin map is complete.
+8. Continue selected PicoMite/WebMite V6 language compatibility work.
 
 ## Priority 1: PicoCalc Input
 
@@ -47,9 +50,33 @@ CSUB baseline, REST client, checker, and target test runner now exist.
 - Decide whether SDL2/DirectFB remains the long-term display backend.
 - Add a native `/dev/fb0` RGB565 backend only if SDL2/DirectFB blocks
   reliability, performance, or console ownership.
+- Review VM-MMBasic's `host_fb` framebuffer model as the preferred reference
+  if a native `/dev/fb0` backend is added.
+- Mine VM-MMBasic shared graphics tests and code organization for framebuffer,
+  tilemap, and RGB regression coverage.
 - Keep documenting that GUI/X11 is not the primary supported target.
 
-## Priority 3: Audio
+## Priority 3: VM-MMBasic Reference Track
+
+The VM-MMBasic project is not the active runtime base for this repo, but it is
+useful reference material. Pull ideas selectively without making the Luckfox
+release depend on a second interpreter tree.
+
+- Use its HAL design as the model for cleaning up MMB4L platform code.
+- Use its `host_fb` framebuffer model as a cleaner alternative if DirectFB
+  becomes a long-term reliability, performance, or console-ownership problem.
+- Reuse ideas from its shared graphics code and tests, especially framebuffer,
+  tilemap, and RGB behavior.
+- Use its `shared/net` command organization as reference for the inbound
+  WebMite-style TCP/HTTP server work.
+- Preserve PicoCalc keyboard, battery, and backlight protocol notes from its
+  PicoCalc drivers for future Linux hardware integration.
+- Use its command coverage documentation as a better model for improving
+  `mmb4l-check-basic` and the compatibility roadmap.
+- Treat a full VM-MMBasic pivot as a separate feasibility spike, not a TODO for
+  the current MMB4L release.
+
+## Priority 4: Audio
 
 - Verify SDL audio over ALSA on the `picocalcsndpwm` card.
 - If SDL audio works, route `BEEP`, `PLAY SOUND`, and related commands through
@@ -58,7 +85,7 @@ CSUB baseline, REST client, checker, and target test runner now exist.
 - Keep compatibility no-op behavior documented for programs that can run
   without sound.
 
-## Priority 4: Inbound Web Server
+## Priority 5: Inbound Web Server
 
 Outbound HTTPS REST calls are implemented. The remaining WebMite-style inbound
 server surface still needs a Linux socket backend:
@@ -80,7 +107,7 @@ Recommended implementation order:
 4. Implement raw read, send, and close.
 5. Add HTTP file/page helpers.
 
-## Priority 5: Raw TCP Client Compatibility
+## Priority 6: Raw TCP Client Compatibility
 
 REST covers the common API case, but raw WebMite TCP client commands remain
 separate work:
@@ -94,7 +121,7 @@ separate work:
 Do this only after the inbound server design is clear, unless a real program
 needs raw client compatibility sooner.
 
-## Priority 6: Hardware IO
+## Priority 7: Hardware IO
 
 - Create `docs/picocalc-pin-map.md`.
 - Mark pins and buses as `reserved-display`, `reserved-keyboard`,
@@ -106,8 +133,10 @@ needs raw client compatibility sooner.
 - Add I2C support through `/dev/i2c-0` only after the bus is proven safe.
 - Add SPI support only if user-accessible SPI is isolated from the display and
   other system devices.
+- Use VM-MMBasic PicoCalc keyboard/battery/backlight code as protocol reference
+  where Linux does not already expose the needed device state.
 
-## Priority 7: Remaining Language Compatibility
+## Priority 8: Remaining Language Compatibility
 
 Command-table candidates that do not consume scarce one-byte function tokens:
 
@@ -147,6 +176,9 @@ Deferred candidate:
 - Add optional substitution suggestions for common dialect differences.
 - Consider a runtime probe mode for cases static analysis cannot prove.
 - Consider a future interpreter-native `mmbasic --check file.bas`.
+- Use VM-MMBasic command coverage documentation as a model for separating
+  fully supported, partially supported, no-op compatibility, platform error,
+  and unsupported language surfaces.
 
 ## Documentation Follow-Up
 

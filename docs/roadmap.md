@@ -56,8 +56,33 @@ Tasks:
 - Keep the DirectFB setup documented and packaged.
 - Decide whether SDL2/DirectFB remains the long-term backend or whether a
   native `/dev/fb0` RGB565 backend is justified.
+- If native `/dev/fb0` work becomes necessary, use VM-MMBasic's host
+  framebuffer model as reference for separating the logical drawing surface
+  from the Linux display flush path.
+- Mine VM-MMBasic shared graphics code and tests for framebuffer, tilemap, and
+  RGB regression cases that should also pass on the Luckfox PicoCalc build.
 
-## Milestone 3: Audio
+## Milestone 3: VM-MMBasic Reference Track
+
+Goal: selectively use the VM-MMBasic project as architecture and test reference
+without replacing the current MMB4L-based release.
+
+Tasks:
+
+- Use its HAL design as the preferred model for future MMB4L platform cleanup.
+- Use its `host_fb` framebuffer model if DirectFB becomes a blocker.
+- Use its shared graphics tests and organization for framebuffer, tilemap, and
+  RGB validation ideas.
+- Use its `shared/net` organization as reference for the inbound WebMite-style
+  TCP/HTTP server work.
+- Use its PicoCalc keyboard, battery, and backlight protocol code as reference
+  for future Linux hardware integration.
+- Use its command coverage documentation as a model for improving
+  `mmb4l-check-basic`.
+- Treat any full VM-MMBasic port as a separate feasibility spike, not the main
+  release path.
+
+## Milestone 4: Audio
 
 Goal: replace compatibility no-op behavior with real sound where practical.
 
@@ -70,7 +95,7 @@ Tasks:
 - Keep no-audio compatibility documented for programs that can continue without
   sound.
 
-## Milestone 4: Inbound Web Server
+## Milestone 5: Inbound Web Server
 
 Goal: implement the useful WebMite-style inbound HTTP/TCP surface on Linux.
 
@@ -86,7 +111,7 @@ Tasks:
 Telnet, TFTP, UDP, MQTT, and AP-mode WiFi management remain out of scope unless
 a real program need changes that decision.
 
-## Milestone 5: Hardware IO Safety Map
+## Milestone 6: Hardware IO Safety Map
 
 Goal: define what can be safely exposed before adding real GPIO/I2C/SPI.
 
@@ -97,8 +122,10 @@ Tasks:
 - Identify display, keyboard, power, storage, boot, and other critical lines.
 - Choose GPIO backend policy: `libgpiod` first, sysfs only as fallback.
 - Verify `/dev/i2c-0` and any SPI devices before exposing them to BASIC.
+- Cross-check PicoCalc keyboard, battery, and backlight behavior against
+  VM-MMBasic's PicoCalc drivers before exposing any Linux-side hooks.
 
-## Milestone 6: Linux-Backed Hardware IO
+## Milestone 7: Linux-Backed Hardware IO
 
 Goal: implement hardware commands only after the safety map is complete.
 
@@ -110,7 +137,7 @@ Tasks:
   devices.
 - Return clear platform errors for unsafe or unavailable hardware.
 
-## Milestone 7: Remaining PicoMite/WebMite Language Compatibility
+## Milestone 8: Remaining PicoMite/WebMite Language Compatibility
 
 Goal: add high-value manual-backed compatibility without exhausting function
 token space.
@@ -139,6 +166,8 @@ Deferred candidate:
 ## Supporting Work
 
 - Keep `mmb4l-check-basic` useful for real SD card BASIC programs.
+- Use VM-MMBasic's command coverage style to classify checker results as
+  supported, partial, no-op compatibility, platform error, or unsupported.
 - Keep `mmb4l-run-tests` reporting success, failure, skip, and no-assertion
   cases clearly.
 - Keep release bundles installable without a build.
