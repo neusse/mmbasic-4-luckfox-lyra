@@ -1,0 +1,102 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Codex <codex@example.com>
+Date: Fri, 26 Jun 2026 00:00:00 -0700
+Subject: [PATCH] Expose PicoCalc graphics backend identity
+
+Expose the active graphics backend through MM.INFO so target tests can prove
+which display path the Luckfox PicoCalc build is exercising. This is the first
+step toward replacing the SDL2/DirectFB PicoCalc path with native fbdev without
+allowing silent backend fallback.
+---
+--- a/src/common/graphics.h
++++ b/src/common/graphics.h
+@@ -147,6 +147,12 @@
+     kOrientClockwise
+ } TextOrientation;
+ 
++typedef enum {
++    kGraphicsBackendNone = 0,
++    kGraphicsBackendSdl,
++    kGraphicsBackendFbdev
++} GraphicsBackend;
++
+ typedef int32_t MmSurfaceId;
+ typedef int64_t MmGraphicsColour; // 32-bit colour, -1 for transparent background colour.
+ typedef void* MmWindowPtr;
+@@ -203,6 +209,12 @@
+ /** Initialises 'graphics' module. */
+ MmResult graphics_init();
+ 
++/** Returns the active graphics backend. */
++GraphicsBackend graphics_backend_current(void);
++
++/** Returns the active graphics backend name for MM.INFO$ and diagnostics. */
++const char *graphics_backend_name(void);
++
+ /** Gets the last error message reported by the underlying SDL implementation. */
+ const char* graphics_last_error();
+ MmSurfaceId graphics_find_window(uint32_t window_id);
+--- a/src/common/graphics.c
++++ b/src/common/graphics.c
+@@ -163,6 +163,7 @@
+ 
+ static const char* NO_ERROR = "";
+ static bool graphics_initialised = false;
++static GraphicsBackend graphics_backend = kGraphicsBackendSdl;
+ MmSurface graphics_surfaces[GRAPHICS_MAX_SURFACES] = { 0 };
+ MmSurface* graphics_current = NULL;
+ MmGraphicsColour graphics_fcolour = RGB_WHITE;
+@@ -196,6 +197,19 @@
+  */
+ MmGraphicsColour graphics_cmm2_background = RGB_BLACK;
+ 
++GraphicsBackend graphics_backend_current(void) {
++    return graphics_backend;
++}
++
++const char *graphics_backend_name(void) {
++    switch (graphics_backend) {
++        case kGraphicsBackendFbdev: return "FBDEV";
++        case kGraphicsBackendSdl: return "SDL";
++        case kGraphicsBackendNone:
++        default: return "NONE";
++    }
++}
++
+ static bool graphics_detect_picocalc_framebuffer(void) {
+     if (access("/dev/fb0", R_OK | W_OK) != 0) return false;
+ 
+@@ -313,6 +327,7 @@
+     frameEnd = 0;
+     result = sprite_init();
+     if (FAILED(result)) return result;
++    graphics_backend = kGraphicsBackendSdl;
+     graphics_initialised = true;
+     return kOk;
+ }
+--- a/src/functions/fun_mminfo.c
++++ b/src/functions/fun_mminfo.c
+@@ -344,6 +344,14 @@
+     g_rtn_type = T_INT;
+ }
+ 
++static void mminfo_graphics_backend(const char *p) {
++    if (!parse_is_end(p)) ERROR_SYNTAX;
++    g_string_rtn = GetTempStrMemory();
++    g_rtn_type = T_STR;
++    strcpy(g_string_rtn, graphics_backend_name());
++    CtoM(g_string_rtn);
++}
++
+ static void mminfo_line(const char *p) {
+     if (!parse_is_end(p)) ERROR_SYNTAX;
+     g_rtn_type = T_STR;
+@@ -603,6 +611,8 @@
+         mminfo_fontwidth(p);
+     } else if ((p = checkstring(ep, "GAMEPAD"))) {
+         mminfo_gamepad(p);
++    } else if ((p = checkstring(ep, "GRAPHICS BACKEND"))) {
++        mminfo_graphics_backend(p);
+     } else if ((p = checkstring(ep, "HRES"))) {
+         mminfo_hres(p);
+     } else if ((p = checkstring(ep, "HPOS"))) {

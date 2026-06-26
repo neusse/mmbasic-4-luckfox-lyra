@@ -643,6 +643,31 @@ feature. A fuller upstream implementation may add `OPTION CONTINUATION LINES`
 state; this patch enables the documented file-loading behavior for compatibility
 with existing programs.
 
+### `0030-picocalc-graphics-backend-identity.patch`
+
+Purpose: expose the active graphics backend so target tests can prove which
+display path the Luckfox PicoCalc build is exercising.
+
+Why it is needed: the planned native fbdev backend must not be hidden behind
+silent SDL2/DirectFB fallback. BASIC and the target runner need an observable
+backend identity before the display path is changed.
+
+What it changes:
+
+- Adds a graphics backend enum.
+- Adds `graphics_backend_current()` and `graphics_backend_name()`.
+- Adds `MM.INFO$(GRAPHICS BACKEND)`.
+- Adds a PicoCalc target regression test that expects `FBDEV`.
+
+Current limitations:
+
+- This patch still reports `SDL` on the current PicoCalc build. The later
+  fbdev patches will switch the PicoCalc release path to `FBDEV`.
+
+Upstream suitability: target-supporting. The backend identity query is broadly
+useful, but the immediate motivation is proving Luckfox/PicoCalc backend
+selection during the fbdev conversion.
+
 ## Patch Rules
 
 - Keep upstream `mmb4l/` as a clean submodule checkout whenever possible.
