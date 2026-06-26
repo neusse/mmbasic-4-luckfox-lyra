@@ -1,0 +1,66 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Codex <codex@example.com>
+Date: Fri, 26 Jun 2026 00:00:00 -0700
+Subject: [PATCH] Complete PicoCalc framebuffer commands on fbdev surfaces
+
+Map PicoCalc FRAMEBUFFER page names onto the VM-style software display
+surfaces: N is the visible display surface, F is the frame surface, and L is
+the layer surface. Add framebuffer SYNC/WAIT presentation through the fbdev
+presenter so copied or merged frames can be flushed explicitly.
+---
+diff --git a/src/commands/cmd_framebuffer.c b/src/commands/cmd_framebuffer.c
+index 0ab51a6..e65b43b 100644
+--- a/src/commands/cmd_framebuffer.c
++++ b/src/commands/cmd_framebuffer.c
+@@ -49,7 +49,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ #include "../common/utility.h"
+ 
+ static MmSurfaceId cmd_framebuffer_normal_surface_id(void) {
+-    return graphics_is_default_display_picocalc() ? 0 : GRAPHICS_SURFACE_N;
++    return GRAPHICS_SURFACE_N;
+ }
+ 
+ static MmResult cmd_framebuffer_get_normal_surface(MmSurface **surface) {
+@@ -225,6 +225,7 @@ static MmResult cmd_framebuffer_merge(const char *p) {
+     // MMB4L ignores the 'mode' and 'update rate' arguments for the moment.
+ 
+     // Copy F to N.
++    if (!graphics_surface_exists(GRAPHICS_SURFACE_F)) return kGraphicsInvalidReadSurface;
+     MmSurface* src_surface = &graphics_surfaces[GRAPHICS_SURFACE_F];
+     MmSurface *dst_surface;
+     ON_FAILURE_RETURN(cmd_framebuffer_get_normal_surface(&dst_surface));
+@@ -233,18 +234,17 @@ static MmResult cmd_framebuffer_merge(const char *p) {
+     if (FAILED(result)) return result;
+ 
+     // Merge L with N.
++    if (!graphics_surface_exists(GRAPHICS_SURFACE_L)) return result;
+     src_surface = &graphics_surfaces[GRAPHICS_SURFACE_L];
+     return graphics_blit(0, 0, 0, 0, src_surface->width, src_surface->height, src_surface,
+                          dst_surface, 0x4, GRAPHICS_RGB121_COLOURS[transparent]);
+ }
+ 
+-/** FRAMEBUFFER WAIT */
+-static MmResult cmd_framebuffer_wait(const char *p) {
++/** FRAMEBUFFER SYNC / WAIT */
++static MmResult cmd_framebuffer_sync(const char *p) {
+     skipspace(p);
+     if (!parse_is_end(p)) return kUnexpectedText;
+-    // Empty implementation for now.
+-    // On the real PicoMiteVGA this waits until the start of the next frame blanking period.
+-    return kOk;
++    return graphics_present_if_needed();
+ }
+ 
+ /** FRAMEBUFFER WRITE {N|F|L} */
+@@ -278,8 +278,10 @@ void cmd_framebuffer(void) {
+         result = cmd_framebuffer_layer(p);
+     } else if ((p = checkstring(cmdline, "MERGE"))) {
+         result = cmd_framebuffer_merge(p);
++    } else if ((p = checkstring(cmdline, "SYNC"))) {
++        result = cmd_framebuffer_sync(p);
+     } else if ((p = checkstring(cmdline, "WAIT"))) {
+-        result = cmd_framebuffer_wait(p);
++        result = cmd_framebuffer_sync(p);
+     } else if ((p = checkstring(cmdline, "WRITE"))) {
+         result = cmd_framebuffer_write(p);
+     } else {

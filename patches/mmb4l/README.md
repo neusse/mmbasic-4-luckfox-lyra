@@ -730,6 +730,37 @@ Upstream suitability: target-specific as written. The software-surface plus
 fbdev-presenter split is a good embedded-Linux model, but this patch is tied to
 the Luckfox PicoCalc framebuffer probe and 320x320 display.
 
+### `0033-picocalc-framebuffer-command-surface.patch`
+
+Purpose: route PicoCalc `FRAMEBUFFER` commands through the VM-style software
+display surfaces.
+
+Why it is needed: after the PicoCalc default display moved from SDL surface `0`
+to software surface `N`, the existing compatibility layer still treated
+`FRAMEBUFFER N` as surface `0`. `FRAMEBUFFER CREATE` and `WRITE F` therefore
+failed before a frame surface could be used.
+
+What it changes:
+
+- Maps `FRAMEBUFFER N` to `GRAPHICS_SURFACE_N`.
+- Keeps `FRAMEBUFFER F` and `FRAMEBUFFER L` on the existing frame/layer
+  software surfaces.
+- Keeps `FRAMEBUFFER CREATE`, `WRITE`, `COPY`, and `MERGE` operating on
+  software pixels.
+- Adds `FRAMEBUFFER SYNC` and makes `FRAMEBUFFER WAIT` flush pending fbdev
+  presentation through `graphics_present_if_needed()`.
+- Adds a PicoCalc target regression test for `CREATE`, `WRITE F`, `COPY F,N`,
+  `WAIT`, and visible pixel readback.
+
+Current limitations:
+
+- The optional `FRAMEBUFFER COPY ..., B` background flag remains accepted but
+  not semantically implemented by MMB4L.
+
+Upstream suitability: target-specific as written. The `N/F/L` mapping is useful
+for PicoMite compatibility, but the fbdev presentation hook is Luckfox/PicoCalc
+specific.
+
 ## Patch Rules
 
 - Keep upstream `mmb4l/` as a clean submodule checkout whenever possible.
