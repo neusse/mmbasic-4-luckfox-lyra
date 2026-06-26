@@ -1,7 +1,7 @@
 # PicoCalc Target Notes
 
 These facts were captured from a Luckfox Lyra PicoCalc over ADB and are used to
-guide the first repeatable MMB4L build.
+guide the repeatable MMB4L build and runtime support policy.
 
 ## Operating System And ABI
 
@@ -11,7 +11,7 @@ guide the first repeatable MMB4L build.
 - libc: glibc 2.38
 - CPU features observed: VFP, VFPv3, VFPv4, NEON, LPAE
 
-The first build target should be ARM hard-float using the Luckfox Buildroot SDK
+The current build target is ARM hard-float using the Luckfox Buildroot SDK
 userland compiler, `arm-buildroot-linux-gnueabihf-gcc`.
 
 ## Display
@@ -26,9 +26,9 @@ userland compiler, `arm-buildroot-linux-gnueabihf-gcc`.
   - `/dev/tty0`: `crw-rw---- root tty`
   - `/dev/fb0`: `crw-rw---- root video`
 
-Stock MMB4L uses SDL2. The target has SDL2 runtime libraries, so SDL should be
-tested first. If SDL/DirectFB is not usable, a native framebuffer backend can be
-added later.
+Stock MMB4L uses SDL2. The current Luckfox/PicoCalc build uses SDL2 with
+DirectFB for the framebuffer path. If SDL/DirectFB becomes a reliability or
+performance blocker, a native framebuffer backend can be added later.
 
 For the current SDL2/DirectFB path, `/etc/directfbrc` should match
 `scripts/target/directfbrc`. The important target-specific settings are
@@ -57,8 +57,9 @@ defined.
 - Name: `Picocalc Keyboard`
 - Stable path observed: `/dev/input/by-path/platform-ff040000.i2c-event-kbd`
 
-The first console milestone can use normal terminal input. A later handheld
-mode can read evdev directly.
+Normal terminal input works for SSH/ADB style use. Direct evdev input remains
+the recommended next step for reliable physical-console graphics-mode keyboard
+handling.
 
 ## Audio
 

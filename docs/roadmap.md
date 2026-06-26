@@ -1,87 +1,147 @@
 # Roadmap
 
 This roadmap keeps the public work focused on MMB4L for the Luckfox Lyra
-PicoCalc. PicoMite firmware sources are not part of this project.
+PicoCalc. PicoMite firmware sources are reference material only; they are not
+part of this project.
 
-## Milestone 0: Repeatable Host Setup
+## Status Summary
 
-Status: mostly complete.
+The initial bring-up is complete:
 
-- Root repository initialized for publication.
-- Upstream MMB4L registered as the `mmb4l/` submodule.
-- Upstream sptools initialized through MMB4L.
-- Windows ADB path documented and verified.
-- Luckfox SDK Buildroot userland compiler discovered from WSL.
-- ARM hard-float ABI probe built, pushed over ADB, and verified with
-  `probe_exit:42`.
-- MMB4L `mmbasic` cross-built, pushed over ADB, and verified with a small BASIC
-  program returning `smoke_exit:0`.
+- Upstream MMB4L is tracked as the `mmb4l/` submodule.
+- Luckfox/PicoCalc changes are applied as patches from `patches/mmb4l/`.
+- The ARMv7 hard-float build runs on the Luckfox PicoCalc.
+- The release bundle includes a compiled `mmbasic`, installer, tests,
+  `mmb4l-run-tests`, `mmb4l-check-basic`, DirectFB config, and checksums.
+- SDL2/DirectFB graphics work on the PicoCalc framebuffer for the current
+  supported console/text-mode target.
+- CSUB execution and `MM.INFO(CALLTABLE)` work for the current ARM Luckfox
+  build, with documented call-table limitations.
+- Linux-owned WiFi status, WiFi scan, read-only `OPTION WIFI`, no-op
+  `WEB NTP`, and outbound HTTP/HTTPS REST calls are implemented.
 
-## Milestone 1: Stock MMB4L Cross Build
+## Supported Target Policy
 
-Status: complete for a first CLI binary.
+The supported target is the Luckfox Lyra PicoCalc running in normal Linux
+console/text mode, or launched over SSH/ADB while using the PicoCalc
+framebuffer. GUI/X11 desktop use is not the primary support path and may vary
+by framebuffer ownership, DirectFB behavior, keyboard routing, and permissions.
 
-Goal: build the upstream MMB4L source for the Luckfox Buildroot target with no
-upstream submodule edits.
+Linux owns WiFi association, DHCP, routing, TLS certificates, and system time.
+MMBasic should inspect network state and provide program network IO, but it
+should not reconfigure Linux networking.
 
-Tasks:
+## Milestone 1: Input Reliability
 
-- Use the CMake/toolchain build path in `scripts/build-mmbasic-wsl.sh`:
-  - `arm-buildroot-linux-gnueabihf-gcc`
-  - the Luckfox SDK sysroot
-  - SDL2 headers and libraries from the SDK sysroot
-- Record any MMB4L build assumptions that are desktop-Linux-specific.
-- Keep upstream source changes out of `mmb4l/` unless captured as patches under
-  `patches/mmb4l/`.
-- Push the first `mmbasic` binary to `/tmp/mmbasic` and run a CLI smoke test.
-
-## Milestone 2: Console BASIC Smoke Test
-
-Goal: prove that the interpreter works before tackling graphics and hardware IO.
-
-Tests:
-
-- `PRINT "hello from picocalc"`
-- integer and floating-point expressions
-- file load/run behavior
-- `MM.INFO$()` behavior
-- exit/system behavior
-
-## Milestone 3: Graphics Strategy
-
-Goal: decide whether stock SDL2 is enough for the first public build.
-
-Order:
-
-1. Try SDL2/DirectFB because the target image has SDL2 runtime libraries.
-2. Verify whether MMB4L graphics can own the 320x320 framebuffer cleanly.
-3. Add a native `/dev/fb0` RGB565 backend only if SDL2 blocks progress.
-
-## Milestone 4: PicoCalc Input
-
-Goal: support the built-in keyboard correctly.
-
-Options:
-
-- Use normal terminal input for the console-first milestone.
-- Add direct evdev input from `/dev/input/event0` for handheld graphics mode.
-
-## Milestone 5: Audio
-
-Goal: verify sound through the target ALSA device.
-
-Order:
-
-1. Try MMB4L SDL audio over ALSA.
-2. Add a direct ALSA backend only if SDL audio is not usable.
-
-## Milestone 6: Hardware IO
-
-Goal: expose real PicoCalc/Luckfox hardware safely.
+Goal: make PicoCalc keyboard behavior reliable in graphics and console use.
 
 Tasks:
 
-- Define a PicoCalc pin map before adding public BASIC commands.
-- Prefer `libgpiod` for GPIO, with sysfs fallback only if required.
-- Use `/dev/i2c-0` for I2C experiments.
-- Do not expose display or system-critical SPI/GPIO lines as general user IO.
+- Add or improve direct evdev input from `/dev/input/event0` or the stable
+  by-path keyboard device.
+- Map arrows, function keys, escape, enter, backspace/delete, modifiers, and
+  break behavior into MMBasic consistently.
+- Preserve normal terminal input for SSH and ADB sessions.
+- Add a target smoke test that can inspect key delivery without hanging.
+
+## Milestone 2: Graphics Completion And Regression Coverage
+
+Goal: keep moving from "graphics works" to "real BASIC programs stay correct."
+
+Tasks:
+
+- Continue testing real programs that mix `CLS`, `PRINT`, `PRINT @`, `TEXT`,
+  sprites, pages, framebuffer commands, and images.
+- Add visual regression programs and captured expected screenshots where useful.
+- Keep the DirectFB setup documented and packaged.
+- Decide whether SDL2/DirectFB remains the long-term backend or whether a
+  native `/dev/fb0` RGB565 backend is justified.
+
+## Milestone 3: Audio
+
+Goal: replace compatibility no-op behavior with real sound where practical.
+
+Tasks:
+
+- Verify SDL audio over ALSA on the `picocalcsndpwm` device.
+- Route `BEEP`, `PLAY SOUND`, and related sound commands through working audio
+  if SDL/ALSA is reliable.
+- Add a direct ALSA backend only if SDL audio blocks progress.
+- Keep no-audio compatibility documented for programs that can continue without
+  sound.
+
+## Milestone 4: Inbound Web Server
+
+Goal: implement the useful WebMite-style inbound HTTP/TCP surface on Linux.
+
+Tasks:
+
+- Add `OPTION TCP SERVER PORT`.
+- Add `OPTION WEB MESSAGES`.
+- Add a nonblocking Linux TCP listener.
+- Add `WEB TCP INTERRUPT`.
+- Add `WEB TCP READ`, `WEB TCP SEND`, and `WEB TCP CLOSE`.
+- Add `WEB TRANSMIT PAGE` and `WEB TRANSMIT FILE`.
+
+Telnet, TFTP, UDP, MQTT, and AP-mode WiFi management remain out of scope unless
+a real program need changes that decision.
+
+## Milestone 5: Hardware IO Safety Map
+
+Goal: define what can be safely exposed before adding real GPIO/I2C/SPI.
+
+Tasks:
+
+- Create `docs/picocalc-pin-map.md`.
+- Classify pins and buses as reserved or safe for user IO.
+- Identify display, keyboard, power, storage, boot, and other critical lines.
+- Choose GPIO backend policy: `libgpiod` first, sysfs only as fallback.
+- Verify `/dev/i2c-0` and any SPI devices before exposing them to BASIC.
+
+## Milestone 6: Linux-Backed Hardware IO
+
+Goal: implement hardware commands only after the safety map is complete.
+
+Tasks:
+
+- Add Linux-backed GPIO for safe pins.
+- Add I2C only for safe exposed buses.
+- Add SPI only if the bus is not shared with display or system-critical
+  devices.
+- Return clear platform errors for unsafe or unavailable hardware.
+
+## Milestone 7: Remaining PicoMite/WebMite Language Compatibility
+
+Goal: add high-value manual-backed compatibility without exhausting function
+token space.
+
+Command-table candidates:
+
+- `/*`
+- `*/`
+- `CHAIN`
+- `LMID`
+- `BIT` assignment
+- `BYTE` assignment
+- `FLAG` assignment
+
+Function-token candidates requiring token-budget review:
+
+- `BIT(`
+- `BYTE(`
+- `FLAG(`
+- `TRIM$(`
+
+Deferred candidate:
+
+- Regex support for `INSTR` and `LINSTR`.
+
+## Supporting Work
+
+- Keep `mmb4l-check-basic` useful for real SD card BASIC programs.
+- Keep `mmb4l-run-tests` reporting success, failure, skip, and no-assertion
+  cases clearly.
+- Keep release bundles installable without a build.
+- Keep the patch queue documented patch by patch.
+- Revisit a source fork only if the patch queue becomes too large to maintain
+  cleanly as patches over upstream MMB4L.

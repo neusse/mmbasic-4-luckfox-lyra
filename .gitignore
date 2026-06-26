@@ -32,5 +32,4 @@ __pycache__/
 # Local machine notes can be kept outside public docs
 *.local.md
 HANDOFF.md
-TODO_mmb4l.md
 docs/superpowers/

@@ -26,9 +26,10 @@ Williams:
 - Upstream MMB4L: https://github.com/thwill1000/mmb4l
 - Upstream sptools submodule: https://github.com/thwill1000/mmbasic-sptools
 
-This repository adds setup notes, build tooling, PicoCalc target notes, and a
-place for project-specific patches. It is intended to make the process usable
-and repeatable for other people, not just for one local machine.
+This repository adds setup notes, build tooling, PicoCalc target notes,
+project-specific patches, release packaging, target tests, and compatibility
+checking. It is intended to make the process usable and repeatable for other
+people, not just for one local machine.
 
 ## Current Status
 
@@ -36,8 +37,17 @@ and repeatable for other people, not just for one local machine.
 - `sptools` is tracked through upstream `mmb4l`.
 - The target device has been observed as Buildroot 2024.02, ARMv7 hard-float,
   glibc 2.38, framebuffer `/dev/fb0`, evdev keyboard input, and ALSA audio.
-- The first milestone is a stock or lightly patched ARM hard-float `mmbasic`
-  build that can run on the PicoCalc from ADB.
+- The ARMv7 hard-float `mmbasic` build runs on the Luckfox PicoCalc.
+- The current release bundle includes the compiled binary, install script,
+  DirectFB configuration, target tests, `mmb4l-run-tests`, `mmb4l-check-basic`,
+  and checksums.
+- SDL2/DirectFB graphics work on the PicoCalc framebuffer for the supported
+  console/text-mode target.
+- CSUB execution, `MM.INFO(CALLTABLE)`, framebuffer/page graphics, many
+  PicoMite-style compatibility commands, and outbound HTTP/HTTPS REST calls are
+  implemented.
+- GUI/X11 desktop use is not the primary support target. Your mileage may vary
+  outside the PicoCalc Linux console/text environment.
 - PicoMite firmware sources are not part of this repository.
 
 ## Clone
@@ -194,6 +204,9 @@ repository as the repeatable build/documentation wrapper.
 - [docs/source-provenance.md](docs/source-provenance.md)
 - [docs/picocalc-target.md](docs/picocalc-target.md)
 - [docs/roadmap.md](docs/roadmap.md)
+- [TODO_mmb4l.md](TODO_mmb4l.md)
+- [docs/webmite-port-map.md](docs/webmite-port-map.md)
+- [docs/picomite-v6-language-target.md](docs/picomite-v6-language-target.md)
 - [docs/build-mmbasic.md](docs/build-mmbasic.md)
 - [docs/deploy.md](docs/deploy.md)
 - [docs/picocalc-repl-usage.md](docs/picocalc-repl-usage.md)
