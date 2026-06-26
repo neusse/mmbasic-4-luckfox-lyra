@@ -1,0 +1,294 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Codex <codex@example.com>
+Date: Fri, 26 Jun 2026 00:00:00 -0700
+Subject: [PATCH] Make PicoCalc display a software fbdev surface
+
+Create the PicoCalc default display as an MMB4L software surface and present
+changed pixels directly to the native fbdev presenter. This reports the
+selected PicoCalc graphics backend as FBDEV and removes the SDL window from the
+automatic PicoCalc graphics path.
+---
+diff --git a/src/common/graphics.h b/src/common/graphics.h
+index ee7cea7..8a6a4fd 100644
+--- a/src/common/graphics.h
++++ b/src/common/graphics.h
+@@ -205,6 +205,8 @@ extern uint32_t graphics_font;
+ 
+ /** The current graphics mode, for CMM2, PicoMiteVGA and MMB4W. */
+ extern unsigned graphics_mode;
++extern volatile uint32_t graphics_visible_generation;
++extern volatile uint32_t graphics_presented_generation;
+ 
+ /** Initialises 'graphics' module. */
+ MmResult graphics_init();
+@@ -222,6 +224,12 @@ MmSurfaceId graphics_find_window(uint32_t window_id);
+ /** Redraws all 'dirty' windows (if the time is right). */
+ void graphics_refresh_windows();
+ 
++/** Marks a graphics surface dirty and records visible-surface changes. */
++void graphics_mark_surface_dirty(MmSurface *surface);
++
++/** Presents the visible framebuffer surface if it has changed. */
++MmResult graphics_present_if_needed(void);
++
+ /** Creates/selects the default PicoCalc display surface when running on Luckfox PicoCalc. */
+ MmResult graphics_ensure_default_display();
+ 
+diff --git a/src/common/graphics.c b/src/common/graphics.c
+index 053396b..7f18f74 100644
+--- a/src/common/graphics.c
++++ b/src/common/graphics.c
+@@ -52,6 +52,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ #include "memory.h"
+ #include "mmb4l.h"
+ #include "path.h"
++#include "picocalc_fbdev.h"
+ #include "program.h"
+ #include "sprite.h"
+ #include "utility.h"
+@@ -61,6 +62,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ #include <assert.h>
+ #include <stdbool.h>
+ #include <stdio.h>
++#include <stdlib.h>
+ #include <string.h>
+ #include <unistd.h>
+ 
+@@ -170,6 +172,8 @@ MmGraphicsColour graphics_fcolour = RGB_WHITE;
+ MmGraphicsColour graphics_bcolour = RGB_BLACK;
+ uint32_t graphics_font = 0x11; // Font 1, scale 1.
+ unsigned graphics_mode = 0;
++volatile uint32_t graphics_visible_generation = 0;
++volatile uint32_t graphics_presented_generation = 0;
+ static uint64_t frameEnd = 0;
+ static bool graphics_default_display_probe_done = false;
+ static bool graphics_default_display_is_picocalc = false;
+@@ -198,11 +202,14 @@ unsigned graphics_colour_depth = 32;
+ MmGraphicsColour graphics_cmm2_background = RGB_BLACK;
+ 
+ GraphicsBackend graphics_backend_current(void) {
++    if (graphics_backend == kGraphicsBackendSdl && graphics_is_default_display_picocalc()) {
++        return kGraphicsBackendFbdev;
++    }
+     return graphics_backend;
+ }
+ 
+ const char *graphics_backend_name(void) {
+-    switch (graphics_backend) {
++    switch (graphics_backend_current()) {
+         case kGraphicsBackendFbdev: return "FBDEV";
+         case kGraphicsBackendSdl: return "SDL";
+         case kGraphicsBackendNone:
+@@ -210,9 +217,15 @@ const char *graphics_backend_name(void) {
+     }
+ }
+ 
+-static bool graphics_detect_picocalc_framebuffer(void) {
+-    if (access("/dev/fb0", R_OK | W_OK) != 0) return false;
++void graphics_mark_surface_dirty(MmSurface *surface) {
++    if (!surface) return;
++    surface->dirty = true;
++    if (surface->id == GRAPHICS_SURFACE_N || surface->id == 0) {
++        ++graphics_visible_generation;
++    }
++}
+ 
++static bool graphics_detect_picocalc_framebuffer(void) {
+     FILE *f = fopen("/proc/fb", "r");
+     if (!f) return false;
+ 
+@@ -241,12 +254,18 @@ MmResult graphics_ensure_default_display() {
+ 
+     if (!graphics_is_default_display_picocalc()) return kGraphicsInvalidWriteSurface;
+ 
+-    MmResult result = kOk;
+-    if (!graphics_surface_exists(0)) {
+-        result = graphics_window_create(0, PICOCALC_DISPLAY_WIDTH, PICOCALC_DISPLAY_HEIGHT,
+-                                        0, 0, 1, "PicoCalc", NULL, true);
++    MmResult result = picocalc_fbdev_open(getenv("MMB4L_FBDEV"));
++    if (FAILED(result)) {
++        return error_throw_ex(kError, "Unable to open PicoCalc framebuffer $: $",
++                              picocalc_fbdev_path(), picocalc_fbdev_last_error());
++    }
++
++    graphics_backend = kGraphicsBackendFbdev;
++    if (!graphics_surface_exists(GRAPHICS_SURFACE_N)) {
++        result = graphics_buffer_create(GRAPHICS_SURFACE_N, PICOCALC_DISPLAY_WIDTH,
++                                        PICOCALC_DISPLAY_HEIGHT);
+     }
+-    if (SUCCEEDED(result)) result = graphics_surface_write(0);
++    if (SUCCEEDED(result)) result = graphics_surface_write(GRAPHICS_SURFACE_N);
+     if (SUCCEEDED(result)) {
+         graphics_fcolour = RGB_WHITE;
+         graphics_bcolour = RGB_BLACK;
+@@ -325,6 +344,8 @@ MmResult graphics_init() {
+     graphics_colour_depth = 12;
+     graphics_cmm2_background = RGB_BLACK;
+     frameEnd = 0;
++    graphics_visible_generation = 0;
++    graphics_presented_generation = 0;
+     result = sprite_init();
+     if (FAILED(result)) return result;
+     graphics_backend = kGraphicsBackendSdl;
+@@ -339,12 +360,17 @@ const char *graphics_last_error() {
+ 
+ MmResult graphics_term() {
+     if (!graphics_initialised) return kOk;
++    (void) graphics_present_if_needed();
+     MmResult result = sprite_term();
+     if (SUCCEEDED(result)) result = graphics_surface_destroy_all();
+     if (SUCCEEDED(result)) {
+         graphics_fcolour = RGB_WHITE;
+         graphics_bcolour = RGB_BLACK;
+         graphics_mode = 0;
++        graphics_visible_generation = 0;
++        graphics_presented_generation = 0;
++        picocalc_fbdev_close();
++        graphics_backend = kGraphicsBackendSdl;
+         graphics_initialised = false;
+     }
+     return result;
+@@ -418,7 +444,7 @@ static inline MmResult graphics_copy_internal(MmSurface *src, MmSurface *dst) {
+ 
+     if (src != dst) {
+         memcpy(dst->pixels, src->pixels, src->width * src->height * sizeof(uint32_t));
+-        dst->dirty = true;
++        graphics_mark_surface_dirty(dst);
+     }
+ 
+     return kOk;
+@@ -474,6 +500,11 @@ static MmResult graphics_refresh_picomite_vga_window() {
+ }
+ 
+ void graphics_refresh_windows() {
++    if (graphics_backend == kGraphicsBackendFbdev) {
++        (void) graphics_present_if_needed();
++        return;
++    }
++
+     // if (SDL_GetTicks64() > frameEnd) {
+     if (SDL_GetTicks() > frameEnd) {
+         switch (mmb_options.simulate) {
+@@ -514,6 +545,23 @@ void graphics_refresh_windows() {
+     }
+ }
+ 
++MmResult graphics_present_if_needed(void) {
++    if (graphics_backend != kGraphicsBackendFbdev) return kOk;
++    if (!picocalc_fbdev_is_open()) return kGraphicsApiError;
++    if (graphics_presented_generation == graphics_visible_generation) return kOk;
++    if (!graphics_surface_exists(GRAPHICS_SURFACE_N)) return kGraphicsInvalidSurface;
++
++    MmSurface *surface = &graphics_surfaces[GRAPHICS_SURFACE_N];
++    if (!surface->pixels) return kGraphicsInvalidSurface;
++
++    MmResult result = picocalc_fbdev_flush_argb8888(surface->pixels, surface->width, surface->height);
++    if (SUCCEEDED(result)) {
++        surface->dirty = false;
++        graphics_presented_generation = graphics_visible_generation;
++    }
++    return result;
++}
++
+ static inline MmSurface *graphics_surface_from_id(MmSurfaceId id) {
+     if (id == -1) return NULL;
+     assert(id >= 0 && id <= GRAPHICS_MAX_ID);
+@@ -766,7 +814,7 @@ static inline void graphics_set_pixel_safe(MmSurface *surface, int x, int y, MmG
+ 
+ MmResult graphics_draw_pixel(MmSurface *surface, int x, int y, MmGraphicsColour colour) {
+     graphics_set_pixel_safe(surface, x, y, colour);
+-    surface->dirty = true;
++    graphics_mark_surface_dirty(surface);
+     return kOk;
+ }
+ 
+@@ -1055,7 +1103,7 @@ MmResult graphics_draw_bitmap(MmSurface *surface, int x1, int y1, int width, int
+         }
+     }
+ 
+-    surface->dirty = true;
++    graphics_mark_surface_dirty(surface);
+ 
+     return kOk;
+ }
+@@ -1279,7 +1327,7 @@ MmResult graphics_draw_circle(MmSurface *surface, int x, int y, int radius, int
+         }
+     }
+ 
+-    surface->dirty = true;
++    graphics_mark_surface_dirty(surface);
+     return kOk;
+ }
+ 
+@@ -1333,7 +1381,7 @@ MmResult graphics_draw_line(MmSurface *surface, int x1, int y1, int x2, int y2,
+     }
+     graphics_draw_buffered(surface, 0, 0, 0, 1);
+     // if (Option.Refresh)Display_Refresh();
+-    surface->dirty = true;
++    graphics_mark_surface_dirty(surface);
+ 
+     return kOk;
+ }
+@@ -1408,7 +1456,7 @@ MmResult graphics_draw_rectangle(MmSurface *surface, int x1, int y1, int x2, int
+     for (int y = y1; y <= y2; y++) {
+         for (int x = x1; x <= x2; x++) graphics_set_pixel(surface, x, y, colour);
+     }
+-    surface->dirty = true;
++    graphics_mark_surface_dirty(surface);
+     return kOk;
+ }
+ 
+@@ -1592,7 +1640,7 @@ MmResult graphics_load_bmp(MmSurface *surface, char *filename, int x, int y) {
+     if (FAILED(result)) return result;
+     spbmp_init(spbmp_file_read_cb, spbmp_set_pixel_cb, spbmp_abort_check_cb);
+     SpBmpResult bmp_result = spbmp_load(file_table[fnbr].file_ptr, x, y, surface);
+-    surface->dirty = true;
++    graphics_mark_surface_dirty(surface);
+     if (FAILED(bmp_result)) {
+         (void) file_close(fnbr);
+         result = kGraphicsLoadBitmapFailed;
+@@ -1731,7 +1779,7 @@ MmResult graphics_load_png(MmSurface *surface, char *filename, int x, int y, int
+     // optiony = savey;
+     upng_free(upng);
+     // clearrepeat();
+-    surface->dirty = true;
++    graphics_mark_surface_dirty(surface);
+     return kOk;
+ }
+ 
+@@ -1906,7 +1954,7 @@ MmResult graphics_blit(int src_x, int src_y, int dst_x, int dst_y, int w, int h,
+     int pdelta = 0; // Added to dst after writing each pixel.
+     int ldelta = 0; // Added to dst after writing each line.
+ 
+-    dst_surface->dirty = true;
++    graphics_mark_surface_dirty(dst_surface);
+ 
+     switch (flags & 0x3) {
+         case kBlitNormal: {
+@@ -1999,7 +2047,7 @@ MmResult graphics_blit_memory_compressed(MmSurface *surface, char *data, int x,
+         }
+     }
+ 
+-    surface->dirty = true;
++    graphics_mark_surface_dirty(surface);
+ 
+     return kOk;
+ }
+@@ -2029,7 +2077,7 @@ MmResult graphics_blit_memory_uncompressed(MmSurface *surface, char *data, int x
+         }
+     }
+ 
+-    surface->dirty = true;
++    graphics_mark_surface_dirty(surface);
+ 
+     return kOk;
+ }
+@@ -2449,7 +2497,7 @@ MmResult graphics_scroll(MmSurface *surface, int x, int y, MmGraphicsColour fill
+                 : graphics_scroll_down(surface, -y, fill);
+     }
+ 
+-    if (SUCCEEDED(result)) surface->dirty = true;
++    if (SUCCEEDED(result)) graphics_mark_surface_dirty(surface);
+     return result;
+ }
+ 

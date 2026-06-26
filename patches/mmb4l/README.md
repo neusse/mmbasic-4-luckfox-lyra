@@ -697,6 +697,39 @@ Upstream suitability: target-specific as written. The fbdev presenter model may
 be useful to upstream MMB4L, but this implementation intentionally validates the
 PicoCalc 320x320 RGB565 framebuffer.
 
+### `0032-picocalc-software-display-surface.patch`
+
+Purpose: make the PicoCalc default display a VM-style software framebuffer
+presented through native Linux fbdev.
+
+Why it is needed: drawing commands should mutate an in-memory MMB4L surface
+first, then flush that surface to `/dev/fb0`. This avoids SDL/DirectFB window
+creation on the PicoCalc release graphics path and makes the active backend
+observable as `FBDEV`.
+
+What it changes:
+
+- Opens `/dev/fb0` through the native fbdev presenter when PicoCalc graphics
+  are first needed.
+- Creates the PicoCalc default display as `GRAPHICS_SURFACE_N`, a 320x320
+  software buffer.
+- Adds visible-surface generation counters and a `graphics_present_if_needed()`
+  flush hook.
+- Marks pixel-mutating graphics paths through `graphics_mark_surface_dirty()`.
+- Flushes the visible software surface during background refresh and once more
+  before graphics shutdown.
+
+Current limitations:
+
+- `FRAMEBUFFER` command semantics still need the follow-up patch so page names
+  map cleanly onto the software display/frame/layer surfaces.
+- Physical-console input and REPL screen rendering still use the existing
+  policy until the console and evdev patches land.
+
+Upstream suitability: target-specific as written. The software-surface plus
+fbdev-presenter split is a good embedded-Linux model, but this patch is tied to
+the Luckfox PicoCalc framebuffer probe and 320x320 display.
+
 ## Patch Rules
 
 - Keep upstream `mmb4l/` as a clean submodule checkout whenever possible.
